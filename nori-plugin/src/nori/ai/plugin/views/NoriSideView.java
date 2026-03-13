@@ -938,14 +938,14 @@ public class NoriSideView extends ViewPart {
         js.append("var old=document.getElementById('nori-browser-context-menu');if(old)old.parentNode.removeChild(old);");
         js.append("var oldBg=document.getElementById('nori-browser-context-bg');if(oldBg)oldBg.parentNode.removeChild(oldBg);");
         js.append("var bg=document.createElement('div');bg.id='nori-browser-context-bg';bg.style.cssText='position:fixed;inset:0;z-index:9998;background:transparent;';");
-        js.append("var menu=document.createElement('div');menu.id='nori-browser-context-menu';menu.style.cssText='position:fixed;left:").append(x).append("px;top:").append(y).append("px;z-index:9999;background:#1f1f22;border:1px solid #4d4d4d;border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,0.35);min-width:180px;padding:6px;';");
-        js.append("function addItem(label, onclick, disabled){var item=document.createElement('div');item.textContent=label;item.style.cssText='padding:9px 12px;border-radius:6px;color:'+(disabled?'#666':'#e8e8e8')+';cursor:'+(disabled?'default':'pointer')+';font-size:12px;';if(!disabled){item.onmouseover=function(){item.style.background='#2d2d30';};item.onmouseout=function(){item.style.background='transparent';};item.onclick=function(e){e.stopPropagation();onclick();if(bg.parentNode)bg.parentNode.removeChild(bg);if(menu.parentNode)menu.parentNode.removeChild(menu);};}menu.appendChild(item);} ");
-        js.append("addItem('🔄 프로젝트 재분석', function(){ refreshProjectAnalysis(); }, false);");
-        js.append("addItem('➕ 새 채팅', function(){ startNewChatFromJs(); }, false);");
+        js.append("var menu=document.createElement('div');menu.id='nori-browser-context-menu';menu.style.cssText='position:fixed;left:").append(x).append("px;top:").append(y).append("px;z-index:9999;background:#202124;border:1px solid #4f5257;border-radius:10px;box-shadow:0 14px 34px rgba(0,0,0,0.42);min-width:240px;padding:6px;backdrop-filter:blur(10px);';");
+        js.append("function addItem(label, hint, onclick, disabled){var item=document.createElement('div');item.style.cssText='display:flex;align-items:center;justify-content:space-between;gap:16px;padding:10px 12px;border-radius:7px;color:'+(disabled?'#666':'#ececec')+';cursor:'+(disabled?'default':'pointer')+';font-size:12px;line-height:1.4;transition:background-color 120ms ease,color 120ms ease;user-select:none;';var left=document.createElement('span');left.textContent=label;left.style.cssText='display:inline-flex;align-items:center;white-space:nowrap;';var right=document.createElement('span');right.textContent=hint||'';right.style.cssText='color:'+(disabled?'#555':'#8e9399')+';font-size:11px;letter-spacing:0.2px;min-width:52px;text-align:right;';item.appendChild(left);item.appendChild(right);if(!disabled){item.onmouseover=function(){item.style.background='#2c3136';right.style.color='#b7bcc3';};item.onmouseout=function(){item.style.background='transparent';right.style.color='#8e9399';};item.onclick=function(e){e.stopPropagation();onclick();if(bg.parentNode)bg.parentNode.removeChild(bg);if(menu.parentNode)menu.parentNode.removeChild(menu);};}menu.appendChild(item);} ");
+        js.append("addItem('🔄 프로젝트 재분석', 'Ctrl+R', function(){ refreshProjectAnalysis(); }, false);");
+        js.append("addItem('➕ 새 채팅', 'Ctrl+N', function(){ startNewChatFromJs(); }, false);");
         if (currentSid.length() > 0) {
-            js.append("addItem('🗑 현재 대화 삭제', function(){ deleteChatSession('").append(currentSid).append("'); }, false);");
+            js.append("addItem('🗑️ 현재 대화 삭제', '', function(){ deleteChatSession('").append(currentSid).append("'); }, false);");
         } else {
-            js.append("addItem('🗑 현재 대화 삭제', function(){}, true);");
+            js.append("addItem('🗑️ 현재 대화 삭제', '', function(){}, true);");
         }
         js.append("bg.onclick=function(){if(bg.parentNode)bg.parentNode.removeChild(bg);if(menu.parentNode)menu.parentNode.removeChild(menu);};");
         js.append("document.body.appendChild(bg);document.body.appendChild(menu);");
