@@ -2172,33 +2172,32 @@ public class NoriSideView extends ViewPart {
         String contextXmlContent = serverSettings[1];
         String workspaceTree = buildWorkspaceTree();
 
-        // 분석 대상 파일 수집 (현재 프로젝트 기준 — 멀티프로젝트 정보는 프로필 상단에 포함)
+        // 분석 대상 파일 수집 (워크스페이스 전체를 하나의 시스템으로 수집)
         List javaFiles = new ArrayList();
-        findAllFiles(projectDir, ".java", javaFiles, 0, 200);
-
         List mapperXmls = new ArrayList();
-        findAllFiles(projectDir, "Mapper.xml", mapperXmls, 0, 50);
-        findAllFiles(projectDir, "_SQL.xml", mapperXmls, 0, 50);
-        findAllFiles(projectDir, "_sql.xml", mapperXmls, 0, 50);
         List allXmls = new ArrayList();
-        findAllFiles(projectDir, ".xml", allXmls, 0, 200);
+        List jspFiles = new ArrayList();
+        List cssFiles = new ArrayList();
+        List jsFiles = new ArrayList();
+        for (int d = 0; d < allProjectDirs.size(); d++) {
+            File scanDir = (File) allProjectDirs.get(d);
+            findAllFiles(scanDir, ".java", javaFiles, 0, 500);
+            findAllFiles(scanDir, "Mapper.xml", mapperXmls, 0, 120);
+            findAllFiles(scanDir, "_SQL.xml", mapperXmls, 0, 120);
+            findAllFiles(scanDir, "_sql.xml", mapperXmls, 0, 120);
+            findAllFiles(scanDir, ".xml", allXmls, 0, 400);
+            findAllFiles(scanDir, ".jsp", jspFiles, 0, 200);
+            findAllFiles(scanDir, ".css", cssFiles, 0, 120);
+            findAllFiles(scanDir, ".js", jsFiles, 0, 120);
+        }
         for (int i = 0; i < allXmls.size(); i++) {
             File xf = (File) allXmls.get(i);
             String xfName = xf.getName().toLowerCase();
-            if ((xfName.startsWith("mybatis") || xfName.contains("_sql_"))
+            if ((xfName.endsWith("mapper.xml") || xfName.contains("_sql") || xfName.startsWith("mybatis"))
                     && !mapperXmls.contains(xf)) {
                 mapperXmls.add(xf);
             }
         }
-
-        List jspFiles = new ArrayList();
-        findAllFiles(projectDir, ".jsp", jspFiles, 0, 100);
-
-        List cssFiles = new ArrayList();
-        findAllFiles(projectDir, ".css", cssFiles, 0, 80);
-
-        List jsFiles = new ArrayList();
-        findAllFiles(projectDir, ".js", jsFiles, 0, 80);
         // node_modules, min.js 등 라이브러리 파일 제외
         for (int i = jsFiles.size() - 1; i >= 0; i--) {
             File jf = (File) jsFiles.get(i);
@@ -2454,7 +2453,9 @@ public class NoriSideView extends ViewPart {
 
         // 8) SQL 파일 목록
         List sqlFiles = new ArrayList();
-        findAllFiles(projectDir, ".sql", sqlFiles, 0, 20);
+        for (int d = 0; d < allProjectDirs.size(); d++) {
+            findAllFiles((File) allProjectDirs.get(d), ".sql", sqlFiles, 0, 80);
+        }
         if (sqlFiles.size() > 0) {
             sb.append("## SQL 파일\n\n");
             for (int i = 0; i < sqlFiles.size(); i++) {
@@ -4167,32 +4168,39 @@ public class NoriSideView extends ViewPart {
         if (path.startsWith(base)) {
             return path.substring(base.length() + 1).replace('\\', '/');
         }
+        try {
+            java.util.List allProjectDirs = getAllWorkspaceProjectDirs();
+            for (int i = 0; i < allProjectDirs.size(); i++) {
+                File dir = (File) allProjectDirs.get(i);
+                String dirBase = dir.getAbsolutePath();
+                if (path.startsWith(dirBase)) {
+                    String rel = path.substring(dirBase.length() + 1).replace('\\', '/');
+                    return dir.getName() + "/" + rel;
+                }
+            }
+        } catch (Exception e) { /* ignore */ }
         return file.getName();
     }
 
-    /** 프로필 서버 업로드용 소스 파일 수집 (Java, XML, JSP) */
+    /** 프로필 서버 업로드용 소스 파일 수집 (워크스페이스 전체 Java, XML, JSP, properties) */
     private java.util.List collectSourceFilesForUpload(File projectDir) {
         java.util.List result = new ArrayList();
         if (projectDir == null || !projectDir.isDirectory()) return result;
         final int MAX_PER_FILE = 80000;
         java.util.List javaFiles = new ArrayList();
-        java.util.List mapperXmls = new ArrayList();
-        java.util.List allXmls = new ArrayList();
+        java.util.List xmlFiles = new ArrayList();
         java.util.List jspFiles = new ArrayList();
-        findAllFiles(projectDir, ".java", javaFiles, 0, 120);
-        findAllFiles(projectDir, "Mapper.xml", mapperXmls, 0, 50);
-        findAllFiles(projectDir, "_SQL.xml", mapperXmls, 0, 50);
-        findAllFiles(projectDir, "_sql.xml", mapperXmls, 0, 50);
-        findAllFiles(projectDir, ".xml", allXmls, 0, 200);
-        for (int i = 0; i < allXmls.size() && mapperXmls.size() < 40; i++) {
-            File xf = (File) allXmls.get(i);
-            String xfName = xf.getName().toLowerCase();
-            if ((xfName.startsWith("mybatis") || xfName.contains("_sql_"))
-                    && !mapperXmls.contains(xf)) {
-                mapperXmls.add(xf);
-            }
+        java.util.List propFiles = new ArrayList();
+        java.util.List allProjectDirs = getAllWorkspaceProjectDirs();
+        for (int d = 0; d < allProjectDirs.size(); d++) {
+            File scanDir = (File) allProjectDirs.get(d);
+            findAllFiles(scanDir, ".java", javaFiles, 0, 300);
+            findAllFiles(scanDir, ".xml", xmlFiles, 0, 240);
+            findAllFiles(scanDir, ".jsp", jspFiles, 0, 120);
+            findAllFiles(scanDir, ".properties", propFiles, 0, 120);
+            findAllFiles(scanDir, ".yml", propFiles, 0, 80);
+            findAllFiles(scanDir, ".yaml", propFiles, 0, 80);
         }
-        findAllFiles(projectDir, ".jsp", jspFiles, 0, 30);
         for (int i = 0; i < javaFiles.size(); i++) {
             File f = (File) javaFiles.get(i);
             String content = readFileContent(f, 500000);
@@ -4202,8 +4210,8 @@ public class NoriSideView extends ViewPart {
             m.put("content", content);
             result.add(m);
         }
-        for (int i = 0; i < mapperXmls.size(); i++) {
-            File f = (File) mapperXmls.get(i);
+        for (int i = 0; i < xmlFiles.size(); i++) {
+            File f = (File) xmlFiles.get(i);
             String content = readFileContent(f, 500000);
             if (content.length() > MAX_PER_FILE) content = content.substring(0, MAX_PER_FILE);
             java.util.Map m = new java.util.HashMap();
@@ -4213,6 +4221,15 @@ public class NoriSideView extends ViewPart {
         }
         for (int i = 0; i < jspFiles.size(); i++) {
             File f = (File) jspFiles.get(i);
+            String content = readFileContent(f, 500000);
+            if (content.length() > MAX_PER_FILE) content = content.substring(0, MAX_PER_FILE);
+            java.util.Map m = new java.util.HashMap();
+            m.put("path", relativePath(f, projectDir));
+            m.put("content", content);
+            result.add(m);
+        }
+        for (int i = 0; i < propFiles.size(); i++) {
+            File f = (File) propFiles.get(i);
             String content = readFileContent(f, 500000);
             if (content.length() > MAX_PER_FILE) content = content.substring(0, MAX_PER_FILE);
             java.util.Map m = new java.util.HashMap();

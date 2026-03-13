@@ -1,97 +1,91 @@
-"""소스 구조 추출 — 클래스·메서드·변수·주석 (인덱싱용)
+"""Source structure extraction and embedding chunk helpers."""
 
-전체 소스가 아닌 시그니처+설명만 추출하여 검색 효율 향상.
-"""
-import re
 import logging
+import re
 from typing import Iterator
-from pathlib import Path
 
 logger = logging.getLogger("nori-server")
 
+SECRET_KEYS = ("password", "secret", "token", "api_key", "apikey", "access_key", "private_key")
+
+
+def _project_name(file_path: str) -> str:
+    normalized = file_path.replace("\\", "/").strip("/")
+    if not normalized:
+        return "unknown"
+    return normalized.split("/", 1)[0]
+
+
+def _extract_class_name(content: str) -> str:
+    class_m = re.search(r"(?:public\s+)?(?:abstract\s+)?(?:class|interface|enum)\s+(\w+)", content)
+    return class_m.group(1) if class_m else "?"
+
+
+def _normalize_comment(text: str, limit: int = 220) -> str:
+    text = re.sub(r"/\*\*?|\*/", " ", text)
+    text = re.sub(r"^\s*\*\s?", " ", text, flags=re.M)
+    text = re.sub(r"\s+", " ", text).strip()
+    return text[:limit]
+
 
 def extract_java_structure(file_path: str, content: str) -> list[dict]:
-    """Java 파일에서 클래스, 메서드, 필드, 주석 추출"""
     lines = content.split("\n")
     items = []
-    class_name = None
-
-    # 클래스명 추출
-    class_m = re.search(r'(?:public\s+)?(?:abstract\s+)?class\s+(\w+)', content)
-    if class_m:
-        class_name = class_m.group(1)
-
-    # JavaDoc 블록 추출 (메서드/클래스 위)
+    class_name = _extract_class_name(content)
     method_pattern = re.compile(
-        r'^\s*(?:public|private|protected)\s+'
-        r'(?:static\s+)?(?:final\s+)?'
-        r'(?:\w+(?:<[^>]+>)?\s+)+\s*(\w+)\s*\('
-    )
-    field_pattern = re.compile(
-        r'^\s*(?:private|protected|public)\s+'
-        r'(?:static\s+)?(?:final\s+)?'
-        r'(?:\w+(?:<[^>]+>)?(?:\s*\[\s*\])?)\s+(\w+)\s*[;=]'
+        r"^\s*(?:public|private|protected)\s+"
+        r"(?:(?:static|final|synchronized|abstract)\s+)*"
+        r"([\w<>\[\], ?]+?)\s+(\w+)\s*\(([^)]*)\)"
     )
 
     i = 0
-    n = len(lines)
-    while i < n:
+    pending_doc = ""
+    pending_line_comment = ""
+    while i < len(lines):
         line = lines[i]
         stripped = line.strip()
 
-        # JavaDoc /** ... */
         if stripped.startswith("/**"):
-            doc_lines = [stripped]
+            doc_lines = [line]
             j = i + 1
-            while j < n and "*/" not in lines[j]:
-                doc_lines.append(lines[j].strip())
+            while j < len(lines) and "*/" not in lines[j]:
+                doc_lines.append(lines[j])
                 j += 1
-            if j < n:
-                doc_lines.append(lines[j].strip())
-            doc_text = " ".join(doc_lines).replace("/**", "").replace("*/", "").replace("*", "").strip()
-            doc_text = re.sub(r"\s+", " ", doc_text)[:200]
-
-            # 다음 non-empty 줄이 메서드/필드인지 확인
-            k = j + 1
-            while k < n and not lines[k].strip():
-                k += 1
-            if k < n:
-                m = method_pattern.match(lines[k])
-                if m:
-                    method_name = m.group(1)
-                    cname = class_name or "?"
-                    items.append({
-                        "type": "method",
-                        "name": f"{cname}.{method_name}()",
-                        "comment": doc_text,
-                        "line": k + 1,
-                    })
-                else:
-                    f = field_pattern.match(lines[k])
-                    if f and doc_text:
-                        items.append({
-                            "type": "field",
-                            "name": f"{class_name or '?'}.{f.group(1)}",
-                            "comment": doc_text,
-                            "line": k + 1,
-                        })
+            if j < len(lines):
+                doc_lines.append(lines[j])
+            pending_doc = _normalize_comment("\n".join(doc_lines))
             i = j + 1
             continue
 
-        # 인라인 주석 // 도 메서드와 매칭
-        m = method_pattern.match(line)
-        if m and not stripped.startswith("//"):
-            method_name = m.group(1)
-            cname = class_name or "?"
-            comment = ""
-            if i > 0 and "//" in lines[i - 1]:
-                comment = lines[i - 1].split("//", 1)[-1].strip()[:150]
+        if stripped.startswith("//"):
+            pending_line_comment = stripped[2:].strip()[:160]
+            i += 1
+            continue
+
+        match = method_pattern.match(line)
+        if match and "(" in line and ")" in line:
+            return_type = re.sub(r"\s+", " ", match.group(1)).strip()
+            method_name = match.group(2)
+            params = re.sub(r"\s+", " ", match.group(3)).strip()
+            comment = pending_doc or pending_line_comment
             items.append({
                 "type": "method",
-                "name": f"{cname}.{method_name}()",
+                "project": _project_name(file_path),
+                "file_path": file_path,
+                "class_name": class_name,
+                "method_name": method_name,
+                "signature": f"{return_type} {method_name}({params})".strip(),
+                "parameters": params,
+                "return_type": return_type,
+                "description": comment,
+                "name": f"{class_name}.{method_name}()",
                 "comment": comment,
                 "line": i + 1,
             })
+            pending_doc = ""
+            pending_line_comment = ""
+        elif stripped:
+            pending_line_comment = ""
 
         i += 1
 
@@ -99,35 +93,116 @@ def extract_java_structure(file_path: str, content: str) -> list[dict]:
 
 
 def extract_xml_structure(file_path: str, content: str) -> list[dict]:
-    """XML(MyBatis)에서 SQL ID, 테이블/컬럼 힌트 추출"""
     items = []
-    # SQL ID
-    for m in re.finditer(r'<(select|insert|update|delete)\s+id\s*=\s*["\'](\w+)["\']', content):
-        tag, sid = m.group(1), m.group(2)
-        items.append({"type": "sql", "name": sid, "comment": f"{tag} ID", "line": 0})
-    # FROM/INTO/UPDATE 뒤 테이블명
-    for m in re.finditer(r'(?:FROM|INTO|UPDATE|JOIN)\s+(\w+)', content, re.I):
-        items.append({"type": "table", "name": m.group(1), "comment": "", "line": 0})
+    for match in re.finditer(r'<(select|insert|update|delete)\s+id\s*=\s*["\']([\w.-]+)["\']', content):
+        tag, sql_id = match.group(1), match.group(2)
+        tail = content[match.end():match.end() + 1200]
+        table_match = re.search(r"(?:FROM|INTO|UPDATE|JOIN)\s+([\w$#]+)", tail, re.I)
+        items.append({
+            "type": "sql",
+            "project": _project_name(file_path),
+            "file_path": file_path,
+            "sql_type": tag.upper(),
+            "name": sql_id,
+            "description": table_match.group(1) if table_match else "",
+            "comment": f"{tag.upper()} query",
+            "line": 0,
+        })
+
+    if items:
+        return items
+
+    for match in re.finditer(r"<([\w:-]+)(?:\s+[^>]*)?>", content):
+        tag = match.group(1)
+        if tag.startswith("?") or tag.startswith("!"):
+            continue
+        items.append({
+            "type": "config",
+            "project": _project_name(file_path),
+            "file_path": file_path,
+            "name": tag,
+            "description": "xml-config",
+            "comment": "xml element",
+            "line": 0,
+        })
+        if len(items) >= 12:
+            break
     return items
 
 
 def extract_jsp_structure(file_path: str, content: str) -> list[dict]:
-    """JSP에서 form, input, 주요 엘리먼트 추출"""
     items = []
-    # form action
-    for m in re.finditer(r'<form[^>]+action\s*=\s*["\']([^"\']+)["\']', content, re.I):
-        items.append({"type": "form", "name": m.group(1), "comment": "form action", "line": 0})
-    # input name
-    for m in re.finditer(r'<input[^>]+name\s*=\s*["\']([^"\']+)["\']', content, re.I):
-        items.append({"type": "input", "name": m.group(1), "comment": "", "line": 0})
-    # id 있는 div/section
-    for m in re.finditer(r'<(?:div|section)[^>]+id\s*=\s*["\']([^"\']+)["\']', content, re.I):
-        items.append({"type": "block", "name": m.group(1), "comment": "", "line": 0})
+    for match in re.finditer(r'<form[^>]+action\s*=\s*["\']([^"\']+)["\']', content, re.I):
+        items.append({
+            "type": "jsp_action",
+            "project": _project_name(file_path),
+            "file_path": file_path,
+            "name": match.group(1),
+            "description": "form action",
+            "comment": "form action",
+            "line": 0,
+        })
+
+    for pattern, label in (
+        (r"<title[^>]*>(.*?)</title>", "title"),
+        (r"<h1[^>]*>(.*?)</h1>", "h1"),
+        (r"<h2[^>]*>(.*?)</h2>", "h2"),
+        (r"<label[^>]*>(.*?)</label>", "label"),
+        (r"<button[^>]*>(.*?)</button>", "button"),
+    ):
+        for match in re.finditer(pattern, content, re.I | re.S):
+            text = re.sub(r"<[^>]+>", " ", match.group(1))
+            text = re.sub(r"\s+", " ", text).strip()
+            if not text:
+                continue
+            items.append({
+                "type": "jsp_keyword",
+                "project": _project_name(file_path),
+                "file_path": file_path,
+                "name": text[:120],
+                "description": label,
+                "comment": label,
+                "line": 0,
+            })
+            if len(items) >= 20:
+                break
+        if len(items) >= 20:
+            break
+    return items
+
+
+def extract_properties_structure(file_path: str, content: str) -> list[dict]:
+    items = []
+    for raw in content.splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#") or line.startswith("!"):
+            continue
+        if ":" in line and ("=" not in line or line.index(":") < line.index("=")):
+            key, value = line.split(":", 1)
+        elif "=" in line:
+            key, value = line.split("=", 1)
+        else:
+            continue
+        key = key.strip()
+        value = value.strip()
+        if not key:
+            continue
+        masked = "****" if any(secret in key.lower() for secret in SECRET_KEYS) else value[:80]
+        items.append({
+            "type": "config",
+            "project": _project_name(file_path),
+            "file_path": file_path,
+            "name": key,
+            "description": masked,
+            "comment": "config entry",
+            "line": 0,
+        })
+        if len(items) >= 40:
+            break
     return items
 
 
 def extract_file_structure(file_path: str, content: str) -> list[dict]:
-    """파일 타입별 구조 추출"""
     lower = file_path.lower()
     if lower.endswith(".java"):
         return extract_java_structure(file_path, content)
@@ -135,21 +210,56 @@ def extract_file_structure(file_path: str, content: str) -> list[dict]:
         return extract_xml_structure(file_path, content)
     if lower.endswith(".jsp"):
         return extract_jsp_structure(file_path, content)
+    if lower.endswith(".properties") or lower.endswith(".yml") or lower.endswith(".yaml"):
+        return extract_properties_structure(file_path, content)
     return []
 
 
 def structure_to_chunks(items: list[dict], file_path: str, max_per_chunk: int = 8) -> Iterator[tuple[str, dict]]:
-    """추출된 구조를 임베딩용 텍스트 청크로 변환"""
-    lines = []
-    for it in items:
-        name = it.get("name", "")
-        comment = it.get("comment", "").strip()
-        if comment:
-            lines.append(f"{name} — {comment}")
-        else:
-            lines.append(name)
+    del max_per_chunk
+    for item in items:
+        kind = item.get("type", "item")
+        name = item.get("name", "")
+        desc = (item.get("description") or item.get("comment") or "").strip()
 
-    text = "\n".join(lines)
-    if len(text.strip()) < 20:
-        return
-    yield text, {"file": file_path, "type": "source_structure", "count": len(items)}
+        if kind == "method":
+            text = (
+                "TYPE\nController/Service Method\n\n"
+                f"PROJECT\n{item.get('project', _project_name(file_path))}\n\n"
+                f"FILE\n{item.get('file_path', file_path)}\n\n"
+                f"CLASS\n{item.get('class_name', '')}\n\n"
+                f"METHOD\n{item.get('method_name', '')}()\n\n"
+                f"SIGNATURE\n{item.get('signature', '')}\n\n"
+                f"PARAMETERS\n{item.get('parameters', '')}\n\n"
+                f"RETURN TYPE\n{item.get('return_type', '')}\n\n"
+                f"DESCRIPTION\n{desc}"
+            )
+        elif kind == "sql":
+            text = (
+                "TYPE\nMapper Query\n\n"
+                f"PROJECT\n{item.get('project', _project_name(file_path))}\n\n"
+                f"FILE\n{item.get('file_path', file_path)}\n\n"
+                f"METHOD\n{name}\n\n"
+                f"SQL TYPE\n{item.get('sql_type', '')}\n\n"
+                f"DESCRIPTION\n{desc}"
+            )
+        elif kind.startswith("jsp"):
+            text = (
+                "TYPE\nJSP Page\n\n"
+                f"PROJECT\n{item.get('project', _project_name(file_path))}\n\n"
+                f"FILE\n{item.get('file_path', file_path)}\n\n"
+                f"KIND\n{kind}\n\n"
+                f"KEYWORD\n{name}\n\n"
+                f"DESCRIPTION\n{desc}"
+            )
+        else:
+            text = (
+                "TYPE\nConfig File\n\n"
+                f"PROJECT\n{item.get('project', _project_name(file_path))}\n\n"
+                f"FILE\n{item.get('file_path', file_path)}\n\n"
+                f"KEY\n{name}\n\n"
+                f"VALUE\n{desc}"
+            )
+
+        if len(text.strip()) > 20:
+            yield text, {"file": item.get("file_path", file_path), "type": kind, "name": name}
