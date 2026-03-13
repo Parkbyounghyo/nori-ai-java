@@ -1,7 +1,7 @@
 """
 의미 단위 텍스트 청커.
-큰 Document를 임베딩에 적합한 크기(~512토큰)로 분할한다.
-오버랩(50토큰)으로 문맥 유지.
+큰 Document를 임베딩에 적합한 크기(~320토큰)로 분할한다.
+오버랩(40토큰)으로 문맥 유지. heading 기반 우선 분할 수행.
 """
 from __future__ import annotations
 
@@ -17,8 +17,8 @@ logger = logging.getLogger("nori-embedding")
 # 보수적으로 1토큰 ≈ 3글자 기준
 _CHARS_PER_TOKEN = 3
 
-DEFAULT_MAX_TOKENS = 512
-DEFAULT_OVERLAP_TOKENS = 50
+DEFAULT_MAX_TOKENS = 320
+DEFAULT_OVERLAP_TOKENS = 40
 
 
 @dataclass
@@ -40,6 +40,22 @@ def _split_by_paragraphs(text: str) -> list[str]:
     # 빈 줄 기준 분할, 연속 빈줄은 하나로
     parts = re.split(r"\n\s*\n", text)
     return [p.strip() for p in parts if p.strip()]
+
+
+def split_by_headings(text: str) -> list[str]:
+    """heading 기반 텍스트 분할. 매칭되는 heading이 없으면 원본 리스트 반환."""
+    heading_pattern = r"(?m)^(?:#{1,6}\s.+|\[Method\]|\[Constructor\]|\[Field\]|질문:|답변:)"
+    matches = list(re.finditer(heading_pattern, text))
+    if not matches:
+        return [text]
+    sections = []
+    for i, match in enumerate(matches):
+        start = match.start()
+        end = matches[i + 1].start() if i + 1 < len(matches) else len(text)
+        section = text[start:end].strip()
+        if section:
+            sections.append(section)
+    return sections if sections else [text]
 
 
 def _merge_small_chunks(paragraphs: list[str], max_chars: int, overlap_chars: int) -> list[str]:
@@ -117,7 +133,11 @@ def chunk_document(doc: Document, config: ChunkConfig | None = None) -> list[Doc
     if len(text) <= cfg.max_chars:
         return [doc]
 
-    paragraphs = _split_by_paragraphs(text)
+    # heading 기반 우선 분할 → 각 섹션을 paragraph로 재분할
+    sections = split_by_headings(text)
+    paragraphs = []
+    for sec in sections:
+        paragraphs.extend(_split_by_paragraphs(sec))
     raw_chunks = _merge_small_chunks(paragraphs, cfg.max_chars, cfg.overlap_chars)
     chunks_with_overlap = _add_overlap(raw_chunks, cfg.overlap_chars)
 

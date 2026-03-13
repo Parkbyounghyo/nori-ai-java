@@ -13,6 +13,8 @@ from __future__ import annotations
 
 import json
 import logging
+import re
+from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -25,6 +27,96 @@ class Document:
     id: str
     text: str
     metadata: dict = field(default_factory=dict)
+
+
+# ────────────────────────────────────────────────────────────
+# Metadata 보강 유틸
+# ────────────────────────────────────────────────────────────
+DOMAIN_MAP: dict[str, str] = {
+    "javadoc":            "dev",
+    "spring-doc":         "dev",
+    "community":          "dev",
+    "community-qa":       "dev",
+    "community-tutorial": "dev",
+    "community-issue":    "dev",
+    "egov":               "dev",
+    "database":           "database",
+    "database-doc":       "database",
+    "oracle-doc":         "database",
+    "mariadb-doc":        "database",
+    "mongodb-doc":        "database",
+    "postgresql-doc":     "database",
+    "redis-doc":          "database",
+    "sqlite-doc":         "database",
+    "web-ui":             "ui",
+    "desktop-ui":         "ui",
+}
+
+_KO_STOPWORDS = {
+    "이", "가", "을", "를", "은", "는", "에", "의", "로", "으로",
+    "에서", "와", "과", "도", "만", "이다", "있다", "하다", "된다",
+    "합니다", "됩니다", "수", "것", "등", "및", "또는", "그리고",
+    "하여", "통해", "위해", "때문에", "경우", "대해", "대한",
+    "이렇게", "저렇게", "어떻게",
+}
+_EN_STOPWORDS = {
+    "the", "and", "for", "with", "this", "that", "from", "are", "was",
+    "has", "have", "not", "but", "can", "will", "all", "one", "its",
+    "returns", "method", "class", "object", "type", "value",
+}
+_IDENTIFIER_RE = re.compile(
+    r"\b[A-Z][a-zA-Z0-9]{2,}\b|[a-z][a-z0-9]*(?:[A-Z][a-zA-Z0-9]+)+"
+)
+
+
+def _detect_domain(source_type: str) -> str:
+    return DOMAIN_MAP.get(source_type, "misc")
+
+
+def _detect_language(text: str) -> str:
+    ko = len(re.findall(r"[\uAC00-\uD7A3]", text))
+    java_kw = len(re.findall(
+        r"\b(?:class|interface|public|private|protected|void|return|import|package|extends|implements)\b",
+        text,
+    ))
+    en = len(re.findall(r"[a-zA-Z]", text))
+    if java_kw >= 3:
+        return "java"
+    if ko > en:
+        return "ko"
+    return "en"
+
+
+def _extract_entities(text: str) -> str:
+    """Java 식별자 및 대문자 시작 단어 추출. ChromaDB 호환을 위해 쉼표 구분 문자열 반환."""
+    matches = _IDENTIFIER_RE.findall(text)
+    seen: list[str] = []
+    for m in matches:
+        if m not in seen:
+            seen.append(m)
+        if len(seen) >= 15:
+            break
+    return ",".join(seen)
+
+
+def _extract_keywords(text: str) -> str:
+    """ํ•ต심 키워드 추출 (10개). ChromaDB 호환을 위해 쉼표 구분 문자열 반환."""
+    ko_words = re.findall(r"[\uAC00-\uD7A3]{2,}", text)
+    en_words = re.findall(r"[a-zA-Z]{3,}", text)
+    candidates = (
+        [w for w in ko_words if w not in _KO_STOPWORDS]
+        + [w.lower() for w in en_words if w.lower() not in _EN_STOPWORDS]
+    )
+    freq = Counter(candidates)
+    return ",".join(w for w, _ in freq.most_common(10))
+
+
+def _enrich_metadata(meta: dict, source_type: str, text: str) -> None:
+    """domain / language / keywords / entity_names 필드를 meta dict에 인플레이스 추가."""
+    meta["domain"] = _detect_domain(source_type)
+    meta["language"] = _detect_language(text)
+    meta["keywords"] = _extract_keywords(text)
+    meta["entity_names"] = _extract_entities(text)
 
 
 # ────────────────────────────────────────────────────────────
@@ -282,7 +374,14 @@ def parse_json_file(file_path: str | Path) -> list[Document]:
 
     source_type = data.get("source_type", "")
     parser = _PARSER_MAP.get(source_type, _parse_section_doc)
-    return parser(data, str(fp))
+    docs = parser(data, str(fp))
+    for doc in docs:
+        _enrich_metadata(
+            doc.metadata,
+            doc.metadata.get("source_type", source_type),
+            doc.text,
+        )
+    return docs
 
 
 def parse_directory(data_dir: str | Path, source_types: list[str] | None = None) -> list[Document]:

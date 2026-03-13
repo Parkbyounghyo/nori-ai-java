@@ -1,9 +1,11 @@
 """
 듀얼 벡터DB 임베딩 검색 서비스
-1차: ChromaDB (빠른 응답) → AI 검수 → 2차: Milvus (정밀 검색)
+ChromaDB vector search (top 20 fetch) → re-rank → top_k 반환
 """
 import logging
+import re
 from pathlib import Path
+from collections import Counter
 
 import chromadb
 from chromadb.config import Settings as ChromaSettings
@@ -12,14 +14,26 @@ from app.config.settings import Settings
 
 logger = logging.getLogger("nori-server")
 
+# 내부 페치 수: 카이에서 rerank 후 top_k 문서 반환
+VECTOR_FETCH_K = 20
+_RERANKER_MODEL = "BAAI/bge-reranker-v2-m3"
+
+_KO_SEARCH_STOPWORDS = {
+    "관련", "알려줘", "어떻게", "뽐야", "좌", "요즘", "최근", "어떤",
+    "있나요", "있어", "있을까", "알고싶어", "설명해", "궁금",
+    "뭐야", "뭐지", "어디서", "언제", "우리", "저희",
+}
+
 
 class EmbeddingService:
-    """듀얼 벡터DB 검색 서비스 (ChromaDB + Milvus)"""
+    """ChromaDB 벡터 검색 서비스 (fetch top-20 → rerank → top_k)"""
 
     def __init__(self, settings: Settings):
         self._settings = settings
         self._chroma_client: chromadb.ClientAPI | None = None
         self._collections: dict[str, chromadb.Collection] = {}
+        self._reranker = None
+        self._reranker_loaded = False
 
     async def initialize(self):
         """서버 시작 시 벡터 DB 연결"""
@@ -50,14 +64,63 @@ class EmbeddingService:
     def is_available(self) -> bool:
         return self._chroma_client is not None
 
-    # ── 1차 검색: ChromaDB ──
+    # ── Reranker lazy load ──
+    def _get_reranker(self):
+        if self._reranker_loaded:
+            return self._reranker
+        try:
+            from sentence_transformers import CrossEncoder
+            self._reranker = CrossEncoder(_RERANKER_MODEL)
+            logger.info(f"Reranker 로드 완료: {_RERANKER_MODEL}")
+        except Exception as e:
+            logger.warning(f"Reranker 로드 실패 (점수 기반 정렬 사용): {e}")
+            self._reranker = None
+        self._reranker_loaded = True
+        return self._reranker
+
+    def _rerank(self, query: str, documents: list[dict], top_n: int) -> list[dict]:
+        """reranker로 정렬. 미설치 시 점수 기반 정렬 폴백."""
+        reranker = self._get_reranker()
+        if not reranker or not documents:
+            return documents[:top_n]
+        try:
+            pairs = [(query, doc["text"]) for doc in documents]
+            scores = reranker.predict(pairs)
+            ranked = sorted(zip(documents, scores), key=lambda x: float(x[1]), reverse=True)
+            return [doc for doc, _ in ranked[:top_n]]
+        except Exception as e:
+            logger.warning(f"Rerank 실패 (점수 기반 정렬 사용): {e}")
+            return documents[:top_n]
+
+    def normalize_query(self, query: str) -> dict:
+        """자연어 쿼리를 벡터 검색용으로 정규화. vector_query / keyword_filter 반환."""
+        ko_words = re.findall(r"[\uAC00-\uD7A3]{2,}", query)
+        en_words = re.findall(r"[a-zA-Z]{2,}", query)
+        keywords = [w for w in ko_words if w not in _KO_SEARCH_STOPWORDS] + en_words
+        # 중복 제거 순서 유지
+        seen: list[str] = []
+        for w in keywords:
+            if w not in seen:
+                seen.append(w)
+        vector_query = " ".join(seen) if seen else query
+        return {
+            "vector_query": vector_query,
+            "keyword_filter": seen[:5],
+            "original_query": query,
+        }
+
+    # ── 1차 검색: ChromaDB (fetch top-20 → rerank → top_k) ──
     async def search(self, query: str, top_k: int = 5,
                      collections: list[str] | None = None,
                      filters: dict | None = None) -> list[dict]:
-        """ChromaDB에서 빠른 유사도 검색"""
+        """ChromaDB vector search → rerank → top_k 반환
+
+        내부적으로 VECTOR_FETCH_K(20)개를 마우고 rerank 후 top_k를 반환한다.
+        """
         if not self.is_available:
             return []
 
+        fetch_k = max(top_k * 4, VECTOR_FETCH_K)
         target_collections = collections or list(self._collections.keys())
         all_results = []
 
@@ -73,7 +136,7 @@ class EmbeddingService:
 
                 query_params = {
                     "query_texts": [query],
-                    "n_results": min(top_k, count),
+                    "n_results": min(fetch_k, count),
                 }
                 if filters:
                     query_params["where"] = filters
@@ -94,9 +157,10 @@ class EmbeddingService:
             except Exception as e:
                 logger.warning(f"컬렉션 '{col_name}' 검색 오류: {e}")
 
-        # 점수 기준 정렬
+        # 1차 점수 정렬 후 rerank
         all_results.sort(key=lambda x: x["score"], reverse=True)
-        return all_results[:top_k]
+        candidates = all_results[:fetch_k]
+        return self._rerank(query, candidates, top_k)
 
     # ── 버전/에러 필터 검색 ──
     async def search_by_error(self, error_pattern: str, top_k: int = 5,
