@@ -150,7 +150,109 @@ def rename_session(user_id: str, session_id: str, title: str) -> Optional[dict]:
     return {"session_id": session_id, "title": title}
 
 
+# ── 선택적 히스토리 조회 ──
+
+def get_selected_messages(user_id: str, session_id: str, indices: list[int]) -> list[dict]:
+    """세션에서 체크박스로 선택한 대화 쌍만 LLM history 형태로 반환
+
+    indices: Q&A 쌍 인덱스 (0-based). index=0 → 첫 번째 user+assistant 쌍.
+    반환: [{"role":"user","content":"..."}, {"role":"assistant","content":"..."}, ...]
+    """
+    session = _load_session(user_id, session_id)
+    if not session:
+        return []
+    pairs = _extract_qa_pairs(session.get("messages", []))
+    selected = []
+    for idx in sorted(set(indices)):
+        if 0 <= idx < len(pairs):
+            pair = pairs[idx]
+            selected.append({"role": "user", "content": pair["user"]})
+            if pair.get("assistant"):
+                selected.append({"role": "assistant", "content": pair["assistant"]})
+    return selected
+
+
+def get_default_history(user_id: str, session_id: str, count: int = 5) -> list[dict]:
+    """선택이 없을 때 기본 히스토리 — 최근 count개 Q&A 쌍 반환
+
+    가이드 기준: 사용자가 별도 선택하지 않으면 최근 5개 디폴트 전송.
+    """
+    session = _load_session(user_id, session_id)
+    if not session:
+        return []
+    pairs = _extract_qa_pairs(session.get("messages", []))
+    recent = pairs[-count:] if len(pairs) > count else pairs
+    history = []
+    for pair in recent:
+        history.append({"role": "user", "content": pair["user"]})
+        if pair.get("assistant"):
+            history.append({"role": "assistant", "content": pair["assistant"]})
+    return history
+
+
+def list_qa_pairs(user_id: str, session_id: str) -> list[dict]:
+    """세션의 Q&A 쌍 목록 반환 — 프론트에서 체크박스 목록 렌더링용
+
+    반환: [{"index": 0, "question": "...(60자 요약)", "has_answer": True}, ...]
+    """
+    session = _load_session(user_id, session_id)
+    if not session:
+        return []
+    pairs = _extract_qa_pairs(session.get("messages", []))
+    result = []
+    for i, pair in enumerate(pairs):
+        q = pair["user"].split("\n")[0].strip()
+        if len(q) > 60:
+            q = q[:57] + "..."
+        result.append({
+            "index": i,
+            "question": q or "(빈 질문)",
+            "has_answer": bool(pair.get("assistant")),
+        })
+    return result
+
+
+def build_history_from_request(
+    user_id: str,
+    session_id: str,
+    client_history: list[dict],
+    selected_indices: list[int] | None = None,
+    default_count: int = 5,
+) -> list[dict]:
+    """히스토리 결정 통합 함수 — 클라이언트 전송 or 선택 인덱스 or 디폴트
+
+    우선순위:
+    1. selected_indices 제공 → 해당 Q&A 쌍만 추출
+    2. client_history 제공 → 그대로 사용 (클라이언트가 이미 선별함)
+    3. 둘 다 없음 → 세션에서 최근 default_count개 Q&A 쌍
+    """
+    if selected_indices is not None and session_id:
+        return get_selected_messages(user_id, session_id, selected_indices)
+    if client_history:
+        return client_history
+    if session_id:
+        return get_default_history(user_id, session_id, default_count)
+    return []
+
+
 # ── 내부 함수 ──
+
+def _extract_qa_pairs(messages: list) -> list[dict]:
+    """메시지 배열에서 Q&A 쌍 추출 — user 메시지 기준으로 쌍을 구성"""
+    pairs = []
+    current_pair = None
+    for msg in messages:
+        role = msg.get("role", "")
+        content = msg.get("content", "")
+        if role == "user":
+            if current_pair:
+                pairs.append(current_pair)
+            current_pair = {"user": content, "assistant": ""}
+        elif role == "assistant" and current_pair:
+            current_pair["assistant"] = content
+    if current_pair:
+        pairs.append(current_pair)
+    return pairs
 
 def _load_session(user_id: str, session_id: str) -> Optional[dict]:
     path = _session_path(user_id, session_id)

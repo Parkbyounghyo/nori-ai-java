@@ -100,3 +100,13 @@ async def delete_session(session_id: str, user_id: str = "default"):
     if not ok:
         return NoriResponse(success=False, error="세션을 찾을 수 없습니다")
     return NoriResponse(data={"deleted": session_id})
+
+
+@router.get("/{session_id}/qa-pairs", response_model=NoriResponse)
+async def list_qa_pairs(session_id: str, user_id: str = "default"):
+    """세션의 Q&A 쌍 목록 — 프론트 체크박스 렌더링용
+
+    반환: [{"index": 0, "question": "첫 질문...", "has_answer": true}, ...]
+    """
+    pairs = css.list_qa_pairs(user_id, session_id)
+    return NoriResponse(data=pairs)

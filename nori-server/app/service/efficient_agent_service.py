@@ -125,7 +125,7 @@ async def efficient_agent_complete(
 
     messages = [{"role": "system", "content": system}]
     if history:
-        messages.extend(history[-4:])
+        messages.extend(history)
     messages.append({"role": "user", "content": user_content})
 
     result = await llm.complete_messages(messages)
@@ -159,7 +159,7 @@ async def efficient_agent_stream(
 
     messages = [{"role": "system", "content": system}]
     if history:
-        messages.extend(history[-4:])
+        messages.extend(history)
     messages.append({"role": "user", "content": user_content})
 
     async for token in llm.stream_messages(messages):

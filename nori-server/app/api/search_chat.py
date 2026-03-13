@@ -96,7 +96,12 @@ async def chat_efficient(
     emb: EmbeddingDep,
 ):
     """효율적 에이전트: 키워드 추출(규칙) → 벡터 검색 → 컨텍스트 조립 → LLM 1회 호출"""
-    effective_history = _trim_history_if_context_shifted(req.message, req.history or [], req.profile)
+    from app.service import chat_session_service as css
+    _raw_history = css.build_history_from_request(
+        req.user_id or "default", req.session_id or "",
+        req.history or [], req.selected_indices,
+    )
+    effective_history = _trim_history_if_context_shifted(req.message, _raw_history, req.profile)
     resolved_msg, pr_meta = _resolve_pronouns_in_message(req.message, effective_history)
     effective_message = resolved_msg if (pr_meta.get('replaced') or pr_meta.get('subject_inferred')) else req.message
     from app.service.efficient_agent_service import (
@@ -129,7 +134,12 @@ async def chat_efficient_stream(
     emb: EmbeddingDep,
 ):
     """효율적 에이전트 스트리밍 — 키워드 검색 → LLM 1회 스트리밍"""
-    effective_history = _trim_history_if_context_shifted(req.message, req.history or [], req.profile)
+    from app.service import chat_session_service as css
+    _raw_history = css.build_history_from_request(
+        req.user_id or "default", req.session_id or "",
+        req.history or [], req.selected_indices,
+    )
+    effective_history = _trim_history_if_context_shifted(req.message, _raw_history, req.profile)
     resolved_msg, pr_meta = _resolve_pronouns_in_message(req.message, effective_history)
     effective_message = resolved_msg if (pr_meta.get('replaced') or pr_meta.get('subject_inferred')) else req.message
     from app.service.efficient_agent_service import (
@@ -167,7 +177,12 @@ async def pick_files(req: PickFilesRequest, llm: LlmDep):
 @router.post("/chat/smart", response_model=NoriResponse)
 async def smart_chat(req: SmartChatRequest, llm: LlmDep, emb: EmbeddingDep):
     """스마트 채팅 — 의도 분류 + 태스크 분할 + 라우팅 (use_efficient 시 LLM 1회만)"""
-    effective_history = _trim_history_if_context_shifted(req.message, req.history or [], req.profile)
+    from app.service import chat_session_service as css
+    _raw_history = css.build_history_from_request(
+        req.user_id or "default", req.session_id or "",
+        req.history or [], req.selected_indices,
+    )
+    effective_history = _trim_history_if_context_shifted(req.message, _raw_history, req.profile)
 
     resolved_msg, pronoun_meta = _resolve_pronouns_in_message(req.message, effective_history)
     effective_message = resolved_msg if (pronoun_meta.get('replaced') or pronoun_meta.get('subject_inferred')) else req.message
@@ -1269,8 +1284,12 @@ async def _smart_chat_stream_inner(req: SmartChatRequest, llm: LlmDep, emb: Embe
         logger.info("[세션] 자동 생성 session_id=%s", _session_id)
     css.append_message(_session_user, _session_id, "user", req.message)
 
-    effective_history = _trim_history_if_context_shifted(req.message, req.history or [], req.profile)
-    _log_step(_t0, "맥락처리", f"history_trimmed={len(effective_history)}건")
+    _raw_history = css.build_history_from_request(
+        _session_user, _session_id,
+        req.history or [], req.selected_indices,
+    )
+    effective_history = _trim_history_if_context_shifted(req.message, _raw_history, req.profile)
+    _log_step(_t0, "맥락처리", f"history_resolved={len(_raw_history)}건→trimmed={len(effective_history)}건")
 
     resolved_message, pronoun_meta = _resolve_pronouns_in_message(req.message, effective_history)
     if pronoun_meta.get('replaced') or pronoun_meta.get('subject_inferred'):

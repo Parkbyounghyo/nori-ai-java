@@ -636,7 +636,7 @@ class LlmService:
                 )
             messages = [{"role": "system", "content": system_chat}]
             if history:
-                messages.extend(history[-4:])
+                messages.extend(history)
             messages.append({"role": "user", "content": detail})
             async for token in self._provider.stream(messages):
                 yield token
@@ -693,7 +693,7 @@ class LlmService:
                 _rag = rag_context[:3000] if len(rag_context) > 3000 else rag_context
                 messages.append({"role": "system", "content": f"[참고 문서]\n{_rag}"})
             if history:
-                messages.extend(history[-6:])
+                messages.extend(history)
 
             # ★ 핵심: 소스 코드를 user 메시지에 질문과 함께 넣기
             # 질문을 먼저, 코드를 나중에 → 7B 모델이 질문에 집중

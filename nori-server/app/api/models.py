@@ -125,6 +125,7 @@ class SmartChatRequest(BaseModel):
     profile: str = Field("", description=".nori-profile.md 내용 (또는 project_id로 서버에서 로드)")
     file_contents: dict = Field(default_factory=dict, description="파일경로: 내용 맵")
     history: list[dict] = Field(default_factory=list, description="대화 이력")
+    selected_indices: list[int] | None = Field(None, description="참고할 대화 쌍 인덱스 (체크박스 선택). None이면 디폴트(최근5개)")
     use_rag: bool = Field(True, description="RAG 검색 사용 여부")
     use_efficient: bool = Field(False, description="효율 모드: LLM 1회만 사용 (키워드→검색→1회추론)")
     selected_code: str = Field("", description="에디터에서 선택된 코드")
