@@ -128,6 +128,25 @@ def delete_profile(settings, user_id: str, project_id: str) -> bool:
     return True
 
 
+def save_server_context(settings, user_id: str, project_id: str, ctx: dict):
+    """서버 설정 (server.xml, context.xml, workspace_tree) 저장"""
+    d = _project_dir(settings, user_id, project_id)
+    d.mkdir(parents=True, exist_ok=True)
+    (d / "server_context.json").write_text(
+        json.dumps(ctx, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+    logger.info("[서버설정저장] user=%s project=%s keys=%s", user_id, project_id, list(ctx.keys()))
+
+
+def load_server_context(settings, user_id: str, project_id: str) -> dict:
+    """저장된 서버 설정 로드"""
+    d = _project_dir(settings, user_id, project_id)
+    p = d / "server_context.json"
+    if not p.exists():
+        return {}
+    return json.loads(p.read_text(encoding="utf-8"))
+
+
 def save_source_structure(settings, user_id: str, project_id: str, files: list[dict]) -> int:
     """소스 파일에서 구조 추출 후 저장. 반환: 추출된 아이템 수."""
     from app.service.source_extractor import extract_file_structure

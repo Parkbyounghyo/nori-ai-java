@@ -1943,7 +1943,14 @@ public class NoriSideView extends ViewPart {
             }
         }
 
-        // 분석 대상 파일 수집
+        // ── 멀티 프로젝트: 워크스페이스 전체 프로젝트 및 서버 설정 수집 ──
+        java.util.List allProjectDirs = getAllWorkspaceProjectDirs();
+        String[] serverSettings = findServerSettings();
+        String serverXmlContent = serverSettings[0];
+        String contextXmlContent = serverSettings[1];
+        String workspaceTree = buildWorkspaceTree();
+
+        // 분석 대상 파일 수집 (현재 프로젝트 기준 — 멀티프로젝트 정보는 프로필 상단에 포함)
         List javaFiles = new ArrayList();
         findAllFiles(projectDir, ".java", javaFiles, 0, 200);
 
@@ -2010,6 +2017,32 @@ public class NoriSideView extends ViewPart {
         StringBuilder sb = new StringBuilder();
         sb.append("# 프로젝트 프로파일: ").append(projectDir.getName()).append("\n\n");
 
+        // 0) 워크스페이스 멀티 프로젝트 구조
+        if (allProjectDirs.size() > 1) {
+            sb.append("## \uD83D\uDCC2 워크스페이스 프로젝트 구조\n");
+            sb.append("이 워크스페이스에는 ").append(allProjectDirs.size()).append("개의 프로젝트가 있습니다.\n\n");
+            for (int p = 0; p < allProjectDirs.size(); p++) {
+                File pd = (File) allProjectDirs.get(p);
+                sb.append("- **").append(pd.getName()).append("**");
+                if (pd.getAbsolutePath().equals(projectDir.getAbsolutePath())) {
+                    sb.append(" ← 현재 분석 대상");
+                }
+                sb.append("\n");
+            }
+            sb.append("\n```\n").append(workspaceTree.length() > 10000 ? workspaceTree.substring(0, 10000) + "\n...(\uc774\ud558 \uc0dd\ub7b5)\n" : workspaceTree).append("```\n\n");
+        }
+
+        // 0-1) 서버 설정 (server.xml / context.xml)
+        if (serverXmlContent.length() > 0 || contextXmlContent.length() > 0) {
+            sb.append("## \uD83D\uDE80 서버 배포 설정\n\n");
+            if (serverXmlContent.length() > 0) {
+                sb.append("### server.xml\n```xml\n").append(serverXmlContent).append("\n```\n\n");
+            }
+            if (contextXmlContent.length() > 0) {
+                sb.append("### context.xml\n```xml\n").append(contextXmlContent).append("\n```\n\n");
+            }
+        }
+
         // 1) 파일 구조
         sb.append("## 파일 구조\n```\n");
         String tree = buildProfileTree(projectDir, "", 0);
@@ -2033,6 +2066,9 @@ public class NoriSideView extends ViewPart {
                 sb.append("### application.yml\n```yaml\n").append(readFileContent(appYml, 2000)).append("\n```\n\n");
             }
         }
+
+        // 2-1) 인프라 설정 (혈관 로직) 수집
+        appendInfrastructureSection(sb, allProjectDirs);
 
         // 3) Java 클래스 AI 분석
         List controllers = new ArrayList();
@@ -2265,13 +2301,19 @@ public class NoriSideView extends ViewPart {
         final NoriApiClient api = NoriApiClient.getInstance();
         String baseUrl = api.getServerUrl();
         if (baseUrl == null || baseUrl.trim().isEmpty()) return;
+
+        // 서버 설정 및 워크스페이스 트리 수집 (UI 스레드에서 안전하게)
+        final String[] serverSettings = findServerSettings();
+        final String wsTree = buildWorkspaceTree();
+
         new Thread(new Runnable() {
             public void run() {
                 try {
                     java.util.List sourceFiles = collectSourceFilesForUpload(projectDir);
                     String projectId = projectDir != null ? projectDir.getName() : "";
                     String name = projectId;
-                    String result = api.uploadProfile(profileContent, projectId, name, sourceFiles);
+                    String result = api.uploadProfile(profileContent, projectId, name, sourceFiles,
+                            serverSettings[0], serverSettings[1], wsTree);
                     if (result != null && !result.startsWith("\uc11c\ubc84") && !result.startsWith("\uc5d0\ub7ec")
                             && !result.startsWith("\uc624\ub958") && !result.contains("\uc5f0\uacb0")) {
                         addSystemMessageOnUI("\ud83d\ude80 프로필이 서버에 업로드되었습니다. (project=" + result + ")");
@@ -2487,6 +2529,162 @@ public class NoriSideView extends ViewPart {
             }
         } catch (Exception e) { /* ignore */ }
         return null;
+    }
+
+    /**
+     * 워크스페이스 내 모든 열린 프로젝트 디렉토리 목록 반환.
+     * Servers 프로젝트는 제외하고 별도 처리한다.
+     */
+    private java.util.List getAllWorkspaceProjectDirs() {
+        java.util.List dirs = new ArrayList();
+        try {
+            IProject[] projects = ResourcesPlugin.getWorkspace().getRoot().getProjects();
+            for (int i = 0; i < projects.length; i++) {
+                if (projects[i].isOpen() && projects[i].getLocation() != null) {
+                    String name = projects[i].getName();
+                    // Servers 프로젝트는 별도 처리 대상이므로 제외
+                    if ("Servers".equalsIgnoreCase(name)) continue;
+                    dirs.add(projects[i].getLocation().toFile());
+                }
+            }
+        } catch (Exception e) { /* ignore */ }
+        return dirs;
+    }
+
+    /**
+     * 워크스페이스 전체의 프로젝트 구조도(트리 문자열) 생성.
+     */
+    private String buildWorkspaceTree() {
+        StringBuilder sb = new StringBuilder();
+        java.util.List allDirs = getAllWorkspaceProjectDirs();
+        for (int i = 0; i < allDirs.size(); i++) {
+            File dir = (File) allDirs.get(i);
+            sb.append("[").append(dir.getName()).append("]\n");
+            String tree = buildProfileTree(dir, "  ", 0);
+            if (tree.length() > 5000) tree = tree.substring(0, 5000) + "\n  ...(\uc774\ud558 \uc0dd\ub7b5)\n";
+            sb.append(tree).append("\n");
+        }
+        if (sb.length() > 30000) {
+            return sb.substring(0, 30000) + "\n...(\uc774\ud558 \uc0dd\ub7b5)\n";
+        }
+        return sb.toString();
+    }
+
+    /**
+     * Eclipse Servers 프로젝트에서 server.xml, context.xml 등 서버 설정 텍스트를 추출.
+     * 반환: [0]=server.xml 내용, [1]=context.xml 내용 (없으면 빈 문자열)
+     */
+    private String[] findServerSettings() {
+        String serverXml = "";
+        String contextXml = "";
+        try {
+            IProject[] projects = ResourcesPlugin.getWorkspace().getRoot().getProjects();
+            for (int i = 0; i < projects.length; i++) {
+                if (!projects[i].isOpen() || projects[i].getLocation() == null) continue;
+                String name = projects[i].getName();
+                // Servers 프로젝트이거나 이름에 "server"가 포함된 프로젝트
+                if ("Servers".equalsIgnoreCase(name) || name.toLowerCase().contains("server")) {
+                    File serverDir = projects[i].getLocation().toFile();
+                    // 하위 폴더들을 탐색 (Tomcat, JBoss 등 서버 폴더)
+                    File[] children = serverDir.listFiles();
+                    if (children == null) continue;
+                    for (int j = 0; j < children.length; j++) {
+                        if (!children[j].isDirectory()) {
+                            // 직접 server.xml이 있는 경우
+                            if ("server.xml".equals(children[j].getName()) && serverXml.length() == 0) {
+                                serverXml = readFileContent(children[j], 10000);
+                            }
+                            if ("context.xml".equals(children[j].getName()) && contextXml.length() == 0) {
+                                contextXml = readFileContent(children[j], 5000);
+                            }
+                            continue;
+                        }
+                        // 서버 인스턴스 폴더 내부 탐색
+                        File sxml = new File(children[j], "server.xml");
+                        if (sxml.exists() && serverXml.length() == 0) {
+                            serverXml = readFileContent(sxml, 10000);
+                        }
+                        File cxml = new File(children[j], "context.xml");
+                        if (cxml.exists() && contextXml.length() == 0) {
+                            contextXml = readFileContent(cxml, 5000);
+                        }
+                    }
+                }
+            }
+        } catch (Exception e) { /* ignore */ }
+        return new String[] { serverXml, contextXml };
+    }
+
+    /**
+     * 인프라 설정 파일(혈관 로직) 수집 — 인증/인가, 예외 처리, 트랜잭션, 로깅, 외부 연동 설정을 프로필에 추가.
+     * @param sb 프로필 StringBuilder
+     * @param scanDirs 스캔 대상 프로젝트 디렉토리 목록
+     */
+    private void appendInfrastructureSection(StringBuilder sb, java.util.List scanDirs) {
+        sb.append("## \uD83C\uDFE5 인프라 설정 (혈관 로직)\n\n");
+
+        // 대상 파일 패턴 목록
+        String[][] infraTargets = {
+            // {파일명 패턴, 섹션 제목, 최대 길이}
+            {"egov-security.xml",      "\uD83D\uDD10 인증/인가 — egov-security.xml",    "5000"},
+            {"security-context.xml",   "\uD83D\uDD10 인증/인가 — security-context.xml", "5000"},
+            {"LoginInterceptor.java",  "\uD83D\uDD10 인증/인가 — LoginInterceptor",     "8000"},
+            {"AuthInterceptor.java",   "\uD83D\uDD10 인증/인가 — AuthInterceptor",      "8000"},
+            {"context-transaction.xml","\uD83D\uDD04 트랜잭션 — context-transaction.xml","3000"},
+            {"context-aspect.xml",     "\uD83D\uDD04 AOP — context-aspect.xml",         "3000"},
+            {"log4j2.xml",             "\uD83D\uDCDD 로깅 — log4j2.xml",                "3000"},
+            {"logback.xml",            "\uD83D\uDCDD 로깅 — logback.xml",               "3000"},
+            {"logback-spring.xml",     "\uD83D\uDCDD 로깅 — logback-spring.xml",        "3000"},
+            {"globals.properties",     "\uD83D\uDD0C 외부 연동 — globals.properties",    "3000"},
+            {"egov-com-servlet.xml",   "\uD83D\uDEA8 예외 처리 — egov-com-servlet.xml",  "3000"},
+        };
+
+        boolean hasAny = false;
+        for (int t = 0; t < infraTargets.length; t++) {
+            String pattern = infraTargets[t][0];
+            String title = infraTargets[t][1];
+            int maxLen = Integer.parseInt(infraTargets[t][2]);
+
+            for (int d = 0; d < scanDirs.size(); d++) {
+                File dir = (File) scanDirs.get(d);
+                File found = findFileDeep(dir, pattern, 8);
+                if (found != null) {
+                    String content = readFileContent(found, maxLen);
+                    if (content.length() > 0) {
+                        String ext = pattern.endsWith(".java") ? "java" :
+                                     pattern.endsWith(".xml") ? "xml" :
+                                     pattern.endsWith(".properties") ? "properties" : "";
+                        sb.append("### ").append(title).append("\n");
+                        sb.append("\uD83D\uDCC1 ").append(found.getAbsolutePath()).append("\n");
+                        sb.append("```").append(ext).append("\n").append(content).append("\n```\n\n");
+                        hasAny = true;
+                        break; // 같은 패턴의 파일은 첫 번째 발견된 것만
+                    }
+                }
+            }
+        }
+
+        // @ControllerAdvice 클래스 탐색
+        for (int d = 0; d < scanDirs.size(); d++) {
+            File dir = (File) scanDirs.get(d);
+            java.util.List javaFiles = new ArrayList();
+            findAllFiles(dir, ".java", javaFiles, 0, 300);
+            for (int i = 0; i < javaFiles.size(); i++) {
+                File jf = (File) javaFiles.get(i);
+                String content = readFileContent(jf, 80000);
+                if (content.contains("@ControllerAdvice") || content.contains("@RestControllerAdvice")) {
+                    sb.append("### \uD83D\uDEA8 예외 처리 — ").append(jf.getName()).append("\n");
+                    sb.append("\uD83D\uDCC1 ").append(relativePath(jf, dir)).append("\n");
+                    sb.append("```java\n").append(content.length() > 5000 ? content.substring(0, 5000) : content)
+                      .append("\n```\n\n");
+                    hasAny = true;
+                }
+            }
+        }
+
+        if (!hasAny) {
+            sb.append("_\uc778\ud504\ub77c \uc124\uc815 \ud30c\uc77c\uc744 \ucc3e\uc9c0 \ubabb\ud588\uc2b5\ub2c8\ub2e4._\n\n");
+        }
     }
 
     /**

@@ -42,6 +42,9 @@ class ProfileUploadRequest(BaseModel):
     project_id: str = Field("", description="프로젝트 ID (비면 content 기반 자동생성)")
     name: str = Field("", description="프로젝트 표시명")
     source_files: list[SourceFileItem] = Field(default_factory=list, description="소스 파일 목록 (클래스·메서드·주석 추출)")
+    server_xml: str = Field("", description="Tomcat server.xml 내용")
+    context_xml: str = Field("", description="Tomcat context.xml 내용")
+    workspace_tree: str = Field("", description="워크스페이스 전체 프로젝트 구조도")
 
 
 @router.post("/upload", response_model=NoriResponse)
@@ -64,6 +67,17 @@ async def upload_profile(
         files = [{"path": f.path, "content": f.content} for f in req.source_files]
         cnt = profile_store.save_source_structure(settings, uid, meta["project_id"], files)
         logger.info("[소스구조] %d개 파일 → %d개 항목", len(req.source_files), cnt)
+    # 서버 설정 저장 (server_xml / context_xml / workspace_tree 제공 시)
+    server_ctx = {}
+    if req.server_xml:
+        server_ctx["server_xml"] = req.server_xml
+    if req.context_xml:
+        server_ctx["context_xml"] = req.context_xml
+    if req.workspace_tree:
+        server_ctx["workspace_tree"] = req.workspace_tree
+    if server_ctx:
+        profile_store.save_server_context(settings, uid, meta["project_id"], server_ctx)
+        logger.info("[서버설정] project=%s keys=%s", meta["project_id"], list(server_ctx.keys()))
     # 백그라운드 임베딩
     asyncio.create_task(_embed_profile_background(uid, meta["project_id"]))
     return NoriResponse(data={

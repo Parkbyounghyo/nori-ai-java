@@ -10,13 +10,10 @@ from app.config.settings import Settings, get_settings
 from app.service.llm_service import LlmService
 from app.service.embedding_service import EmbeddingService
 from app.service.memo_service import MemoService
-from app.service.pl_workflow_service import PlWorkflowService
-
-# ── 서비스 싱글톤 ──
+# ── 서비스 싱글턴 ──
 _llm_service: LlmService | None = None
 _embedding_service: EmbeddingService | None = None
 _memo_service: MemoService | None = None
-_pl_workflow_service: PlWorkflowService | None = None
 _start_time: float = time.time()
 
 
@@ -26,13 +23,11 @@ def get_start_time() -> float:
 
 async def init_services(settings: Settings):
     """서버 시작 시 서비스 초기화"""
-    global _llm_service, _embedding_service, _memo_service, _pl_workflow_service, _start_time
+    global _llm_service, _embedding_service, _memo_service, _start_time
     _start_time = time.time()
     _llm_service = LlmService(settings)
     _embedding_service = EmbeddingService(settings)
     _memo_service = MemoService()
-    _pl_workflow_service = PlWorkflowService()
-    _pl_workflow_service.set_llm_service(_llm_service)
     await _embedding_service.initialize()
     # LLM 서비스에 메모 서비스 연결
     _llm_service.set_memo_service(_memo_service)
@@ -69,16 +64,8 @@ def get_memo_service_dep() -> MemoService:
     return _memo_service
 
 
-def get_pl_workflow_service() -> PlWorkflowService:
-    global _pl_workflow_service
-    if _pl_workflow_service is None:
-        _pl_workflow_service = PlWorkflowService()
-    return _pl_workflow_service
-
-
 # 타입 별칭
 LlmDep = Annotated[LlmService, Depends(get_llm_service)]
 EmbeddingDep = Annotated[EmbeddingService, Depends(get_embedding_service)]
 MemoDep = Annotated[MemoService, Depends(get_memo_service_dep)]
-PlDep = Annotated[PlWorkflowService, Depends(get_pl_workflow_service)]
 SettingsDep = Annotated[Settings, Depends(get_settings)]

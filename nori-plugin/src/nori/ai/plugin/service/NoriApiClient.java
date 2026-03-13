@@ -243,6 +243,20 @@ public class NoriApiClient {
      */
     public String uploadProfile(String content, String projectId, String name,
                                 List sourceFiles) {
+        return uploadProfile(content, projectId, name, sourceFiles, "", "", "");
+    }
+
+    /**
+     * 프로필 + 소스 구조 + 서버 설정 + 워크스페이스 트리 업로드.
+     * @param serverXml   server.xml 내용 (없으면 빈 문자열)
+     * @param contextXml  context.xml 내용 (없으면 빈 문자열)
+     * @param workspaceTree 워크스페이스 전체 프로젝트 구조도
+     * @return 성공 시 project_id, 실패 시 null
+     */
+    public String uploadProfile(String content, String projectId, String name,
+                                List sourceFiles,
+                                String serverXml, String contextXml,
+                                String workspaceTree) {
         StringBuilder sfArr = new StringBuilder("[");
         for (int i = 0; i < sourceFiles.size(); i++) {
             if (i > 0) sfArr.append(",");
@@ -265,6 +279,15 @@ public class NoriApiClient {
                 .put("project_id", projectId != null ? projectId : "")
                 .put("name", name != null ? name : "")
                 .putRaw("source_files", sfArr.toString());
+        if (serverXml != null && serverXml.length() > 0) {
+            jb.put("server_xml", serverXml);
+        }
+        if (contextXml != null && contextXml.length() > 0) {
+            jb.put("context_xml", contextXml);
+        }
+        if (workspaceTree != null && workspaceTree.length() > 0) {
+            jb.put("workspace_tree", workspaceTree);
+        }
         return postAndExtract("/profile/upload", jb.build(), "project_id");
     }
 
