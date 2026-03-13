@@ -59,8 +59,8 @@ public class NoriSideView extends ViewPart {
     private StyledText fallbackText;
     private boolean useBrowser = false;
     private Text chatInput;
-    private Button ragCheck;
-    private Button projectCheck;
+    private Button historyCheck;
+    private List selectedHistoryIndices = new ArrayList();
     private Label statusLabel;
 
     private Font monoFont;
@@ -222,6 +222,20 @@ public class NoriSideView extends ViewPart {
                     return null;
                 }
             };
+            // JavaScript → Java 콜백: 세션 삭제
+            new BrowserFunction(browser, "deleteChatSession") {
+                public Object function(Object[] args) {
+                    if (args.length > 0) {
+                        final String sessionId = String.valueOf(args[0]);
+                        Display.getDefault().asyncExec(new Runnable() {
+                            public void run() {
+                                deleteSession(sessionId);
+                            }
+                        });
+                    }
+                    return null;
+                }
+            };
             // ── PL 워크플로우: nori:// URL 핸들러 ──
             browser.addLocationListener(new org.eclipse.swt.browser.LocationListener() {
                 public void changing(org.eclipse.swt.browser.LocationEvent event) {
@@ -249,15 +263,14 @@ public class NoriSideView extends ViewPart {
         inputBar.setLayout(new GridLayout(5, false));
         inputBar.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
 
-        ragCheck = new Button(inputBar, SWT.CHECK);
-        ragCheck.setText("RAG");
-        ragCheck.setSelection(true);
-        ragCheck.setToolTipText("벡터DB 문서 참조 (RAG)");
-
-        projectCheck = new Button(inputBar, SWT.CHECK);
-        projectCheck.setText("\uD83D\uDCC2 프로젝트");
-        projectCheck.setSelection(true);
-        projectCheck.setToolTipText("현재 프로젝트 소스 코드를 AI에 전달");
+        historyCheck = new Button(inputBar, SWT.PUSH);
+        historyCheck.setText("대화 선택");
+        historyCheck.setToolTipText("질문에 포함할 이전 대화 목록을 선택합니다.");
+        historyCheck.addListener(SWT.Selection, new org.eclipse.swt.widgets.Listener() {
+            public void handleEvent(org.eclipse.swt.widgets.Event e) {
+                showHistorySelectionDialog();
+            }
+        });
 
         chatInput = new Text(inputBar, SWT.BORDER | SWT.MULTI | SWT.WRAP | SWT.V_SCROLL);
         GridData chatInputGd = new GridData(SWT.FILL, SWT.FILL, true, false);
@@ -376,15 +389,37 @@ public class NoriSideView extends ViewPart {
         }
 
         // 프로젝트 디렉토리만 UI 스레드에서 가져오기 (SWT API 필요)
-        final boolean useProject = projectCheck.getSelection();
-        final File projectDir = useProject ? getActiveProjectDir() : null;
+        final boolean useProject = true;
+        final File projectDir = getActiveProjectDir();
 
         messages.add(new String[]{"user", displayMessage, null, nowTimestamp()});
         chatHistory.add(new String[]{"user", message});
         refreshDisplay();
 
-        final boolean useRag = ragCheck.getSelection();
-        final List histSnapshot = new ArrayList(chatHistory);
+        final boolean useRag = true;
+        // 선택된 대화 인덱스에 해당하는 히스토리만 추출
+        final List histSnapshot;
+        if (!selectedHistoryIndices.isEmpty()) {
+            histSnapshot = new ArrayList();
+            for (int si = 0; si < selectedHistoryIndices.size(); si++) {
+                int selIdx = ((Integer) selectedHistoryIndices.get(si)).intValue();
+                // 인덱스는 Q&A 쌍 기준 (0번째 쌍 = chatHistory[0],chatHistory[1])
+                int baseIdx = selIdx * 2;
+                if (baseIdx < chatHistory.size()) {
+                    histSnapshot.add(chatHistory.get(baseIdx)); // user
+                }
+                if (baseIdx + 1 < chatHistory.size()) {
+                    histSnapshot.add(chatHistory.get(baseIdx + 1)); // assistant
+                }
+            }
+        } else {
+            histSnapshot = new ArrayList();
+        }
+        // 선택 초기화
+        selectedHistoryIndices.clear();
+        if (historyCheck != null && !historyCheck.isDisposed()) {
+            historyCheck.setText("대화 선택");
+        }
 
         Job job = new Job("Nori AI - \ucc44\ud305") {
             protected IStatus run(IProgressMonitor monitor) {
@@ -645,6 +680,114 @@ public class NoriSideView extends ViewPart {
         refreshDisplay();
     }
 
+    /** 대화 이력 선택 팝업 (최대 5개 제한) */
+    private void showHistorySelectionDialog() {
+        // chatHistory에서 Q&A 쌍 추출
+        java.util.List qaPairs = new java.util.ArrayList();
+        for (int i = 0; i < chatHistory.size(); i += 2) {
+            String[] userMsg = (String[]) chatHistory.get(i);
+            String qText = userMsg[1];
+            if (qText.length() > 60) qText = qText.substring(0, 60) + "...";
+            qaPairs.add(qText);
+        }
+        if (qaPairs.isEmpty()) {
+            org.eclipse.jface.dialogs.MessageDialog.openInformation(
+                    getSite().getShell(), "대화 선택", "선택할 대화 이력이 없습니다.");
+            return;
+        }
+
+        // 체크박스 팝업 다이얼로그
+        org.eclipse.jface.dialogs.Dialog dialog = new org.eclipse.jface.dialogs.Dialog(getSite().getShell()) {
+            private java.util.List checkButtons = new java.util.ArrayList();
+
+            protected void configureShell(org.eclipse.swt.widgets.Shell shell) {
+                super.configureShell(shell);
+                shell.setText("\uD83D\uDCCB 참고할 대화 선택 (최대 5개)");
+                shell.setSize(400, Math.min(500, 150 + qaPairs.size() * 28));
+            }
+
+            protected org.eclipse.swt.widgets.Control createDialogArea(Composite parent) {
+                Composite area = (Composite) super.createDialogArea(parent);
+                org.eclipse.swt.custom.ScrolledComposite sc =
+                        new org.eclipse.swt.custom.ScrolledComposite(area, SWT.V_SCROLL | SWT.BORDER);
+                sc.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
+                sc.setExpandHorizontal(true);
+                sc.setExpandVertical(true);
+
+                Composite inner = new Composite(sc, SWT.NONE);
+                inner.setLayout(new GridLayout(1, false));
+
+                for (int i = 0; i < qaPairs.size(); i++) {
+                    Button cb = new Button(inner, SWT.CHECK);
+                    cb.setText("[" + (i + 1) + "] " + qaPairs.get(i));
+                    cb.setData("index", Integer.valueOf(i));
+                    // 기존 선택 복원
+                    if (selectedHistoryIndices.contains(Integer.valueOf(i))) {
+                        cb.setSelection(true);
+                    }
+                    checkButtons.add(cb);
+                }
+
+                sc.setContent(inner);
+                inner.setSize(inner.computeSize(SWT.DEFAULT, SWT.DEFAULT));
+                return area;
+            }
+
+            protected void okPressed() {
+                // 선택 개수 체크
+                java.util.List newSelection = new java.util.ArrayList();
+                for (int i = 0; i < checkButtons.size(); i++) {
+                    Button cb = (Button) checkButtons.get(i);
+                    if (cb.getSelection()) {
+                        newSelection.add(cb.getData("index"));
+                    }
+                }
+                if (newSelection.size() > 5) {
+                    org.eclipse.jface.dialogs.MessageDialog.openWarning(
+                            getShell(), "선택 초과", "최대 5개까지만 선택할 수 있습니다.\n현재 " + newSelection.size() + "개 선택됨.");
+                    return;
+                }
+                selectedHistoryIndices = newSelection;
+                super.okPressed();
+            }
+        };
+
+        if (dialog.open() == org.eclipse.jface.dialogs.Dialog.OK) {
+            if (selectedHistoryIndices.isEmpty()) {
+                historyCheck.setText("대화 선택");
+            } else {
+                historyCheck.setText("대화 선택(" + selectedHistoryIndices.size() + ")");
+            }
+        }
+    }
+
+    /** 세션 삭제 — 백그라운드 Job에서 API 호출 후 UI 갱신 */
+    private void deleteSession(final String sessionId) {
+        Job job = new Job("Nori AI - 세션 삭제") {
+            protected IStatus run(IProgressMonitor monitor) {
+                boolean ok = NoriApiClient.getInstance().deleteSession(sessionId, "default");
+                Display.getDefault().asyncExec(new Runnable() {
+                    public void run() {
+                        if (ok) {
+                            // 현재 세션이 삭제된 경우 새 채팅으로 전환
+                            if (sessionId.equals(currentSessionId)) {
+                                startNewChat();
+                            }
+                            showChatListInBrowser();
+                        } else {
+                            if (statusLabel != null && !statusLabel.isDisposed()) {
+                                statusLabel.setText("\u274C 세션 삭제 실패");
+                            }
+                        }
+                    }
+                });
+                return Status.OK_STATUS;
+            }
+        };
+        job.setUser(false);
+        job.schedule();
+    }
+
     /** 채팅 목록을 브라우저 내 HTML 오버레이로 표시 */
     private void showChatListInBrowser() {
         final NoriApiClient api = NoriApiClient.getInstance();
@@ -745,7 +888,12 @@ public class NoriSideView extends ViewPart {
                   .append(date).append(" \\u00B7 ").append(cnt).append("개 메시지");
                 if (isCurrent) js.append(" \\u00B7 현재");
                 js.append("';");
-                js.append("it.appendChild(t1);it.appendChild(t2);");
+                js.append("var row=document.createElement('div');row.style.cssText='display:flex;justify-content:space-between;align-items:center;';");
+                js.append("var left=document.createElement('div');left.style.cssText='flex:1;overflow:hidden;';left.appendChild(t1);left.appendChild(t2);");
+                js.append("var del=document.createElement('span');del.style.cssText='color:#888;font-size:16px;cursor:pointer;padding:4px 8px;flex-shrink:0;';del.textContent='\uD83D\uDDD1\uFE0F';");
+                js.append("del.title='이 대화 삭제';");
+                js.append("del.onclick=(function(sid){return function(e){e.stopPropagation();if(confirm('이 대화를 삭제하시겠습니까?'))deleteChatSession(sid);};}('").append(sid).append("'));");
+                js.append("row.appendChild(left);row.appendChild(del);it.appendChild(row);");
                 js.append("it.onclick=(function(sid){return function(){ov.parentNode.removeChild(ov);loadChatSession(sid);};}('").append(sid).append("'));");
                 js.append("box.appendChild(it);}");
             }
@@ -2267,11 +2415,6 @@ public class NoriSideView extends ViewPart {
             try {
                 Display.getDefault().asyncExec(new Runnable() {
                     public void run() {
-                        if (projectCheck != null && !projectCheck.isDisposed()) {
-                            projectCheck.setEnabled(true);
-                            projectCheck.setSelection(true);
-                            projectCheck.setToolTipText("\ud604\uc7ac \ud504\ub85c\uc81d\ud2b8 \uc18c\uc2a4 \ucf54\ub4dc\ub97c AI\uc5d0 \uc804\ub2ec");
-                        }
                         if (statusLabel != null && !statusLabel.isDisposed()) {
                             String url = NoriApiClient.getInstance().getServerUrl();
                             statusLabel.setText("\u25CF \uc5f0\uacb0\ub428 \u2014 " + url);
@@ -4965,12 +5108,6 @@ public class NoriSideView extends ViewPart {
                         statusLabel.setText(connected
                                 ? "\u25CF 연결됨 \u2014 " + url
                                 : "\u25CB 연결 안됨 \u2014 " + url);
-                        // 프로필 존재 시 체크박스 활성화
-                        if (profileState == 2 && projectCheck != null && !projectCheck.isDisposed()) {
-                            projectCheck.setEnabled(true);
-                            projectCheck.setSelection(true);
-                            projectCheck.setToolTipText("\ud604\uc7ac \ud504\ub85c\uc81d\ud2b8 \uc18c\uc2a4 \ucf54\ub4dc\ub97c AI\uc5d0 \uc804\ub2ec");
-                        }
                         refreshDisplay();
                         // 프로필 없고 서버 연결됨 → 자동 분석 시작
                         if (connected && profileState == 0 && !autoAnalysisTriggered) {
