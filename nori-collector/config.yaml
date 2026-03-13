@@ -1,0 +1,728 @@
+# 수집 대상 설정
+
+targets:
+  javadoc:
+    enabled: true
+    base_url: "https://docs.oracle.com/en/java/javase/17/docs/api"
+    # 핵심 패키지만 먼저 수집 (전체는 너무 오래 걸림)
+    packages:
+      - "java.lang"
+      - "java.util"
+      - "java.util.stream"
+      - "java.util.function"
+      - "java.util.concurrent"
+      - "java.io"
+      - "java.nio"
+      - "java.nio.file"
+      - "java.net"
+      - "java.net.http"
+      - "java.time"
+      - "java.math"
+      - "java.sql"
+      - "java.text"
+      - "java.util.regex"
+    output_dir: "data/javadoc"
+    delay_seconds: 1.0  # 서버 부하 방지용 딜레이
+
+  spring:
+    enabled: true
+    sources:
+      - name: "spring-boot-reference"
+        url: "https://docs.spring.io/spring-boot/reference/"
+        type: "html"
+      - name: "spring-framework-reference"
+        url: "https://docs.spring.io/spring-framework/reference/"
+        type: "html"
+    output_dir: "data/spring-docs"
+    delay_seconds: 1.5
+
+  # ── 웹 프론트엔드 UI/UX 기술 문서 ──
+  web_ui:
+    enabled: true
+    sources:
+      # 🌐 웹 기본 (HTML5, CSS3, JavaScript) — MDN Web Docs
+      - name: "mdn-html"
+        url: "https://developer.mozilla.org/en-US/docs/Web/HTML/Element"
+        category: "web-html5"
+        parser: "mdn"
+        max_depth: 2
+        max_pages: 150
+      - name: "mdn-css"
+        url: "https://developer.mozilla.org/en-US/docs/Web/CSS/Reference"
+        category: "web-css3"
+        parser: "mdn"
+        max_depth: 2
+        max_pages: 200
+      - name: "mdn-javascript"
+        url: "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference"
+        category: "web-javascript"
+        parser: "mdn"
+        max_depth: 2
+        max_pages: 200
+
+      # ☕ Java 서버사이드 템플릿 엔진
+      - name: "thymeleaf"
+        url: "https://www.thymeleaf.org/doc/tutorials/3.1/usingthymeleaf.html"
+        category: "template-thymeleaf"
+        parser: "generic"
+        max_depth: 1
+        max_pages: 50
+      - name: "freemarker"
+        url: "https://freemarker.apache.org/docs/"
+        category: "template-freemarker"
+        parser: "generic"
+        max_depth: 2
+        max_pages: 100
+      - name: "jsp-jstl"
+        url: "https://docs.oracle.com/javaee/5/tutorial/doc/bnakc.html"
+        category: "template-jsp"
+        parser: "generic"
+        max_depth: 2
+        max_pages: 80
+
+      # ⚛️ JavaScript 프레임워크 (SPA)
+      - name: "react"
+        url: "https://react.dev/reference/react"
+        category: "js-framework-react"
+        parser: "generic"
+        max_depth: 2
+        max_pages: 150
+      - name: "vuejs"
+        url: "https://vuejs.org/guide/introduction.html"
+        category: "js-framework-vue"
+        parser: "generic"
+        max_depth: 2
+        max_pages: 150
+      - name: "angular"
+        url: "https://angular.dev/overview"
+        category: "js-framework-angular"
+        parser: "generic"
+        max_depth: 2
+        max_pages: 150
+
+      # 🎨 CSS 프레임워크 / UI 컴포넌트
+      - name: "bootstrap"
+        url: "https://getbootstrap.com/docs/5.3/getting-started/introduction/"
+        category: "css-framework-bootstrap"
+        parser: "generic"
+        max_depth: 2
+        max_pages: 100
+      - name: "tailwindcss"
+        url: "https://tailwindcss.com/docs/installation"
+        category: "css-framework-tailwind"
+        parser: "generic"
+        max_depth: 2
+        max_pages: 100
+
+      # 📦 유틸리티 라이브러리 (eGov 기본 포함)
+      - name: "jquery"
+        url: "https://api.jquery.com/"
+        category: "js-lib-jquery"
+        parser: "generic"
+        max_depth: 2
+        max_pages: 150
+    output_dir: "data/web-ui"
+    delay_seconds: 1.5
+
+  # ── 데스크탑/모바일 UI 기술 문서 ──
+  desktop_ui:
+    enabled: true
+    sources:
+      # 🖥️ JavaFX (현대적 Java GUI)
+      - name: "javafx-docs"
+        url: "https://openjfx.io/javadoc/21/"
+        category: "desktop-javafx"
+        parser: "javafx"
+        max_depth: 2
+        max_pages: 200
+      - name: "javafx-guide"
+        url: "https://openjfx.io/openjfx-docs/"
+        category: "desktop-javafx"
+        parser: "generic"
+        max_depth: 2
+        max_pages: 80
+
+      # 🪟 Swing (클래식 Java GUI)
+      - name: "swing-tutorial"
+        url: "https://docs.oracle.com/javase/tutorial/uiswing/"
+        category: "desktop-swing"
+        parser: "oracle-tutorial"
+        max_depth: 3
+        max_pages: 200
+      - name: "awt-tutorial"
+        url: "https://docs.oracle.com/javase/tutorial/2d/"
+        category: "desktop-awt"
+        parser: "oracle-tutorial"
+        max_depth: 2
+        max_pages: 80
+
+      # 🔌 SWT/JFace (Eclipse 플랫폼 UI — 우리 플러그인에 필요!)
+      - name: "swt-jface"
+        url: "https://www.eclipse.org/swt/widgets/"
+        category: "desktop-swt"
+        parser: "eclipse-swt"
+        max_depth: 2
+        max_pages: 100
+      - name: "eclipse-platform-ui"
+        url: "https://help.eclipse.org/latest/topic/org.eclipse.platform.doc.isv/guide/swt.htm"
+        category: "desktop-swt"
+        parser: "generic"
+        max_depth: 2
+        max_pages: 100
+
+      # 📱 Android (Java/Kotlin 모바일 UI)
+      - name: "android-ui-guide"
+        url: "https://developer.android.com/develop/ui"
+        category: "mobile-android"
+        parser: "android"
+        max_depth: 2
+        max_pages: 150
+      - name: "android-compose"
+        url: "https://developer.android.com/develop/ui/compose"
+        category: "mobile-android-compose"
+        parser: "android"
+        max_depth: 2
+        max_pages: 100
+    output_dir: "data/desktop-ui"
+    delay_seconds: 1.5
+
+  # ── 개발자 커뮤니티 질답/에러 해결 사례 ──
+  community:
+    enabled: true
+    sources:
+      # 🔥 StackOverflow — Java/Spring 인기 질답 (에러 해결 비법!)
+      - name: "so-java-core"
+        parser: "stackoverflow"
+        tags: ["java", "nullpointerexception", "arraylist", "hashmap", "java-stream"]
+        category: "community-so-java"
+        max_pages: 10
+        page_size: 30
+
+      - name: "so-spring"
+        parser: "stackoverflow"
+        tags: ["spring-boot", "spring-mvc", "spring-security", "spring-data-jpa"]
+        category: "community-so-spring"
+        max_pages: 8
+        page_size: 30
+
+      - name: "so-java-web"
+        parser: "stackoverflow"
+        tags: ["jsp", "servlets", "jstl", "thymeleaf", "mybatis"]
+        category: "community-so-javaweb"
+        max_pages: 6
+        page_size: 30
+
+      - name: "so-java-errors"
+        parser: "stackoverflow"
+        tags: ["classnotfoundexception", "nosuchbeandefinitionexception",
+               "java-io", "jdbc", "maven"]
+        category: "community-so-errors"
+        max_pages: 6
+        page_size: 30
+
+      # 🔴 StackOverflow — 에러/예외 집중 수집
+      - name: "so-runtime-errors"
+        parser: "stackoverflow"
+        tags: ["nullpointerexception", "classcastexception",
+               "illegalargumentexception", "illegalstateexception",
+               "concurrentmodificationexception", "stackoverflowerror",
+               "outofmemoryerror"]
+        category: "community-so-runtime-errors"
+        max_pages: 8
+        page_size: 30
+
+      - name: "so-spring-errors"
+        parser: "stackoverflow"
+        tags: ["spring-boot-error", "beancreationexception",
+               "nosuchbeandefinitionexception",
+               "unsatisfieddependencyexception",
+               "httpmessagenotreadableexception",
+               "spring-boot-actuator"]
+        category: "community-so-spring-errors"
+        max_pages: 8
+        page_size: 30
+
+      - name: "so-jpa-hibernate-errors"
+        parser: "stackoverflow"
+        tags: ["lazyinitializationexception", "hibernate",
+               "spring-data-jpa", "jpa", "n-plus-one",
+               "optimistic-locking", "entity-manager",
+               "jpql", "hibernate-mapping"]
+        category: "community-so-jpa-errors"
+        max_pages: 8
+        page_size: 30
+
+      # 🗄️ StackOverflow — Oracle DB 에러 집중
+      - name: "so-oracle-errors"
+        parser: "stackoverflow"
+        tags: ["oracle", "plsql", "oracle-sqldeveloper",
+               "ora-00001", "ora-00942", "ora-01722",
+               "ora-12154", "ora-12541", "oracle-database"]
+        category: "community-so-oracle"
+        max_pages: 10
+        page_size: 30
+
+      - name: "so-oracle-query"
+        parser: "stackoverflow"
+        tags: ["oracle", "sql", "oracle-sqldeveloper",
+               "oracle11g", "oracle12c", "oracle19c"]
+        category: "community-so-oracle-query"
+        max_pages: 8
+        page_size: 30
+
+      # 🔄 StackOverflow — 버전 마이그레이션 이슈
+      - name: "so-java-migration"
+        parser: "stackoverflow"
+        tags: ["java-11", "java-17", "java-21",
+               "java-module-system", "javax", "jakarta-ee",
+               "java-version", "unsupportedclassversionerror"]
+        category: "community-so-migration"
+        max_pages: 8
+        page_size: 30
+
+      - name: "so-spring-boot-migration"
+        parser: "stackoverflow"
+        tags: ["spring-boot-3", "spring-boot-2",
+               "spring-boot-migration", "javax-to-jakarta"]
+        category: "community-so-sb-migration"
+        max_pages: 6
+        page_size: 30
+
+      - name: "so-build-tools"
+        parser: "stackoverflow"
+        tags: ["maven", "gradle", "pom.xml"]
+        category: "community-so-build"
+        max_pages: 5
+        page_size: 30
+
+      # 📚 Baeldung — Java/Spring 실전 튜토리얼 + 에러 해결 가이드
+      - name: "baeldung-java"
+        parser: "baeldung"
+        start_urls:
+          - "https://www.baeldung.com/java-tutorial"
+          - "https://www.baeldung.com/java-exceptions"
+          - "https://www.baeldung.com/java-collections"
+        category: "tutorial-baeldung-java"
+        max_depth: 2
+        max_pages: 150
+
+      - name: "baeldung-spring"
+        parser: "baeldung"
+        start_urls:
+          - "https://www.baeldung.com/spring-boot"
+          - "https://www.baeldung.com/spring-mvc"
+          - "https://www.baeldung.com/spring-security"
+          - "https://www.baeldung.com/spring-data-jpa"
+        category: "tutorial-baeldung-spring"
+        max_depth: 2
+        max_pages: 200
+
+      - name: "baeldung-errors"
+        parser: "baeldung"
+        start_urls:
+          - "https://www.baeldung.com/java-common-errors"
+          - "https://www.baeldung.com/spring-boot-errors"
+        category: "tutorial-baeldung-errors"
+        max_depth: 2
+        max_pages: 100
+
+      # 📕 Baeldung — 에러 해결 집중 + 마이그레이션 가이드
+      - name: "baeldung-exceptions"
+        parser: "baeldung"
+        start_urls:
+          - "https://www.baeldung.com/java-exceptions"
+          - "https://www.baeldung.com/java-checked-unchecked-exceptions"
+          - "https://www.baeldung.com/java-global-exception-handler"
+          - "https://www.baeldung.com/exception-handling-for-rest-with-spring"
+          - "https://www.baeldung.com/spring-boot-custom-error-page"
+        category: "tutorial-baeldung-exceptions"
+        max_depth: 2
+        max_pages: 100
+
+      - name: "baeldung-migration"
+        parser: "baeldung"
+        start_urls:
+          - "https://www.baeldung.com/java-8-new-features"
+          - "https://www.baeldung.com/java-11-new-features"
+          - "https://www.baeldung.com/java-17-new-features"
+          - "https://www.baeldung.com/java-21"
+          - "https://www.baeldung.com/spring-boot-3-migration"
+          - "https://www.baeldung.com/spring-boot-3-url-matching"
+          - "https://www.baeldung.com/javax-to-jakarta"
+        category: "tutorial-baeldung-migration"
+        max_depth: 2
+        max_pages: 80
+
+      - name: "baeldung-jpa-hibernate"
+        parser: "baeldung"
+        start_urls:
+          - "https://www.baeldung.com/hibernate-common-performance-problems"
+          - "https://www.baeldung.com/jpa-hibernate-differences"
+          - "https://www.baeldung.com/spring-data-jpa-query"
+          - "https://www.baeldung.com/hibernate-lazy-eager-loading"
+          - "https://www.baeldung.com/jpa-entity-lifecycle-events"
+        category: "tutorial-baeldung-jpa"
+        max_depth: 2
+        max_pages: 100
+
+      - name: "baeldung-oracle"
+        parser: "baeldung"
+        start_urls:
+          - "https://www.baeldung.com/spring-jdbc-oracle"
+          - "https://www.baeldung.com/spring-boot-oracle"
+          - "https://www.baeldung.com/java-jdbc-oracle"
+        category: "tutorial-baeldung-oracle"
+        max_depth: 2
+        max_pages: 50
+
+      # 🌱 Spring.io 공식 Getting Started 가이드
+      - name: "spring-guides"
+        parser: "spring-guides"
+        url: "https://spring.io/guides"
+        category: "tutorial-spring-guides"
+        max_pages: 100
+
+      # 🇰🇷 OKKY — 한국 개발자 커뮤니티 (Java/Spring/eGov 질답)
+      - name: "okky-java"
+        parser: "okky"
+        url: "https://okky.kr"
+        tags: ["java", "spring", "전자정부", "egovframework", "mybatis", "jpa"]
+        category: "community-okky"
+        max_pages: 30
+
+      # 🐙 GitHub Issues — Spring Boot / eGov 프로젝트 이슈
+      - name: "github-spring"
+        parser: "github-issues"
+        repos:
+          - "spring-projects/spring-boot"
+          - "spring-projects/spring-framework"
+          - "spring-projects/spring-security"
+        category: "community-github-spring"
+        max_issues: 100
+
+      - name: "github-hibernate"
+        parser: "github-issues"
+        repos:
+          - "hibernate/hibernate-orm"
+          - "mybatis/mybatis-3"
+          - "mybatis/spring-boot-starter"
+        category: "community-github-orm"
+        max_issues: 80
+
+      # 📖 Oracle DB 공식 에러 레퍼런스 + JDBC
+      - name: "oracle-error-ref"
+        parser: "generic"
+        url: "https://docs.oracle.com/en/database/oracle/oracle-database/19/errmg/"
+        category: "reference-oracle-errors"
+        max_depth: 2
+        max_pages: 200
+
+      - name: "oracle-sql-ref"
+        parser: "generic"
+        url: "https://docs.oracle.com/en/database/oracle/oracle-database/19/sqlrf/"
+        category: "reference-oracle-sql"
+        max_depth: 2
+        max_pages: 200
+
+      - name: "oracle-jdbc"
+        parser: "generic"
+        url: "https://docs.oracle.com/en/database/oracle/oracle-database/19/jjdbc/"
+        category: "reference-oracle-jdbc"
+        max_depth: 2
+        max_pages: 100
+
+      # 📖 Java 버전별 마이그레이션 공식 가이드
+      - name: "oracle-java11-migration"
+        parser: "generic"
+        url: "https://docs.oracle.com/en/java/javase/11/migrate/"
+        category: "migration-java-11"
+        max_depth: 2
+        max_pages: 50
+
+      - name: "oracle-java17-migration"
+        parser: "generic"
+        url: "https://docs.oracle.com/en/java/javase/17/migrate/"
+        category: "migration-java-17"
+        max_depth: 2
+        max_pages: 50
+
+      - name: "oracle-java21-migration"
+        parser: "generic"
+        url: "https://docs.oracle.com/en/java/javase/21/migrate/"
+        category: "migration-java-21"
+        max_depth: 2
+        max_pages: 50
+
+    output_dir: "data/community"
+    delay_seconds: 2.0  # 커뮤니티는 좀 더 여유있게
+
+  # ── 전자정부프레임워크(eGovFrame) 전문 자료 ──
+  egov:
+    enabled: true
+    sources:
+      # 📖 eGov 공식 위키/가이드
+      - name: "egov-wiki"
+        parser: "egov-wiki"
+        url: "https://www.egovframe.go.kr/wiki/doku.php"
+        category: "egov-guide"
+        max_depth: 3
+        max_pages: 300
+
+      # 📖 eGov 개발자 가이드 (개발환경, 실행환경)
+      - name: "egov-dev-guide"
+        parser: "egov-wiki"
+        url: "https://www.egovframe.go.kr/wiki/doku.php?id=egovframework:rte"
+        category: "egov-runtime"
+        max_depth: 3
+        max_pages: 200
+
+      # 💬 eGov 개발자 포럼/Q&A
+      - name: "egov-qna"
+        parser: "egov-qna"
+        url: "https://www.egovframe.go.kr/home/qainfo/qainfoList.do"
+        category: "egov-qna"
+        max_pages: 50
+
+      # 🐙 eGov GitHub 소스코드 (표준 패턴/설정/컴포넌트)
+      - name: "egov-source"
+        parser: "egov-github"
+        repos:
+          - "eGovFramework/egovframe-runtime"
+          - "eGovFramework/egovframe-common-all"
+          - "eGovFramework/egovframe-template-simple-backend"
+          - "eGovFramework/egovframe-template-simple-react"
+        category: "egov-source"
+        file_patterns: [".java", ".xml", ".properties", ".yml"]
+        max_files: 200
+
+    output_dir: "data/egov"
+    delay_seconds: 2.0
+
+  # ── 데이터베이스 공식 문서 ──
+  database:
+    enabled: true
+    sources:
+      # 🐬 MySQL 공식 레퍼런스 매뉴얼 (8.0)
+      - name: "mysql-sql-statements"
+        url: "https://dev.mysql.com/doc/refman/8.0/en/sql-statements.html"
+        category: "db-mysql-sql"
+        parser: "mysql"
+        max_depth: 2
+        max_pages: 200
+      - name: "mysql-functions"
+        url: "https://dev.mysql.com/doc/refman/8.0/en/functions.html"
+        category: "db-mysql-functions"
+        parser: "mysql"
+        max_depth: 2
+        max_pages: 150
+      - name: "mysql-data-types"
+        url: "https://dev.mysql.com/doc/refman/8.0/en/data-types.html"
+        category: "db-mysql-types"
+        parser: "mysql"
+        max_depth: 2
+        max_pages: 80
+      - name: "mysql-optimization"
+        url: "https://dev.mysql.com/doc/refman/8.0/en/optimization.html"
+        category: "db-mysql-optimize"
+        parser: "mysql"
+        max_depth: 2
+        max_pages: 100
+      - name: "mysql-error-ref"
+        url: "https://dev.mysql.com/doc/refman/8.0/en/error-handling.html"
+        category: "db-mysql-errors"
+        parser: "mysql"
+        max_depth: 2
+        max_pages: 100
+      - name: "mysql-connector-j"
+        url: "https://dev.mysql.com/doc/connector-j/en/"
+        category: "db-mysql-jdbc"
+        parser: "mysql"
+        max_depth: 2
+        max_pages: 80
+
+      # 🔷 Microsoft SQL Server (MSSQL) — T-SQL 레퍼런스
+      - name: "mssql-tsql"
+        url: "https://learn.microsoft.com/en-us/sql/t-sql/language-reference"
+        category: "db-mssql-tsql"
+        parser: "mssql"
+        max_depth: 2
+        max_pages: 200
+      - name: "mssql-functions"
+        url: "https://learn.microsoft.com/en-us/sql/t-sql/functions/functions"
+        category: "db-mssql-functions"
+        parser: "mssql"
+        max_depth: 2
+        max_pages: 150
+      - name: "mssql-jdbc"
+        url: "https://learn.microsoft.com/en-us/sql/connect/jdbc/overview-of-the-jdbc-driver"
+        category: "db-mssql-jdbc"
+        parser: "mssql"
+        max_depth: 2
+        max_pages: 80
+      - name: "mssql-errors"
+        url: "https://learn.microsoft.com/en-us/sql/relational-databases/errors-events/database-engine-events-and-errors"
+        category: "db-mssql-errors"
+        parser: "mssql"
+        max_depth: 2
+        max_pages: 100
+
+      # 🐘 PostgreSQL 공식 문서 (16)
+      - name: "postgresql-sql"
+        url: "https://www.postgresql.org/docs/current/sql.html"
+        category: "db-postgresql-sql"
+        parser: "postgresql"
+        max_depth: 2
+        max_pages: 200
+      - name: "postgresql-functions"
+        url: "https://www.postgresql.org/docs/current/functions.html"
+        category: "db-postgresql-functions"
+        parser: "postgresql"
+        max_depth: 2
+        max_pages: 150
+      - name: "postgresql-admin"
+        url: "https://www.postgresql.org/docs/current/admin.html"
+        category: "db-postgresql-admin"
+        parser: "postgresql"
+        max_depth: 2
+        max_pages: 100
+      - name: "postgresql-jdbc"
+        url: "https://jdbc.postgresql.org/documentation/"
+        category: "db-postgresql-jdbc"
+        parser: "generic"
+        max_depth: 2
+        max_pages: 60
+
+      # 🔴 Oracle Database (19c) — SQL + PL/SQL + JDBC
+      - name: "oracle-sql-lang"
+        url: "https://docs.oracle.com/en/database/oracle/oracle-database/19/sqlrf/"
+        category: "db-oracle-sql"
+        parser: "oracle"
+        max_depth: 2
+        max_pages: 200
+      - name: "oracle-plsql"
+        url: "https://docs.oracle.com/en/database/oracle/oracle-database/19/lnpls/"
+        category: "db-oracle-plsql"
+        parser: "oracle"
+        max_depth: 2
+        max_pages: 150
+      - name: "oracle-error-messages"
+        url: "https://docs.oracle.com/en/database/oracle/oracle-database/19/errmg/"
+        category: "db-oracle-errors"
+        parser: "oracle"
+        max_depth: 2
+        max_pages: 200
+      - name: "oracle-jdbc-dev"
+        url: "https://docs.oracle.com/en/database/oracle/oracle-database/19/jjdbc/"
+        category: "db-oracle-jdbc"
+        parser: "oracle"
+        max_depth: 2
+        max_pages: 100
+
+      # 🦭 MariaDB Knowledge Base
+      - name: "mariadb-sql"
+        url: "https://mariadb.com/kb/en/sql-statements/"
+        category: "db-mariadb-sql"
+        parser: "mariadb"
+        max_depth: 2
+        max_pages: 200
+      - name: "mariadb-functions"
+        url: "https://mariadb.com/kb/en/built-in-functions/"
+        category: "db-mariadb-functions"
+        parser: "mariadb"
+        max_depth: 2
+        max_pages: 150
+      - name: "mariadb-connector-j"
+        url: "https://mariadb.com/kb/en/about-mariadb-connector-j/"
+        category: "db-mariadb-jdbc"
+        parser: "mariadb"
+        max_depth: 2
+        max_pages: 60
+
+      # 🪶 SQLite 공식 문서
+      - name: "sqlite-lang"
+        url: "https://www.sqlite.org/lang.html"
+        category: "db-sqlite-sql"
+        parser: "sqlite"
+        max_depth: 1
+        max_pages: 80
+      - name: "sqlite-functions"
+        url: "https://www.sqlite.org/lang_corefunc.html"
+        category: "db-sqlite-functions"
+        parser: "sqlite"
+        max_depth: 1
+        max_pages: 30
+      - name: "sqlite-pragma"
+        url: "https://www.sqlite.org/pragma.html"
+        category: "db-sqlite-pragma"
+        parser: "sqlite"
+        max_depth: 1
+        max_pages: 20
+
+      # 🍃 MongoDB 공식 문서 (NoSQL)
+      - name: "mongodb-crud"
+        url: "https://www.mongodb.com/docs/manual/crud/"
+        category: "db-mongodb-crud"
+        parser: "mongodb"
+        max_depth: 2
+        max_pages: 100
+      - name: "mongodb-aggregation"
+        url: "https://www.mongodb.com/docs/manual/aggregation/"
+        category: "db-mongodb-aggregation"
+        parser: "mongodb"
+        max_depth: 2
+        max_pages: 80
+      - name: "mongodb-indexes"
+        url: "https://www.mongodb.com/docs/manual/indexes/"
+        category: "db-mongodb-indexes"
+        parser: "mongodb"
+        max_depth: 2
+        max_pages: 60
+      - name: "mongodb-java-driver"
+        url: "https://www.mongodb.com/docs/drivers/java/sync/current/"
+        category: "db-mongodb-java"
+        parser: "mongodb"
+        max_depth: 2
+        max_pages: 80
+
+      # 🔻 Redis 공식 문서 (In-Memory / 캐시)
+      - name: "redis-commands"
+        url: "https://redis.io/docs/latest/commands/"
+        category: "db-redis-commands"
+        parser: "redis"
+        max_depth: 2
+        max_pages: 150
+      - name: "redis-data-types"
+        url: "https://redis.io/docs/latest/develop/data-types/"
+        category: "db-redis-types"
+        parser: "redis"
+        max_depth: 2
+        max_pages: 60
+      - name: "redis-java"
+        url: "https://redis.io/docs/latest/develop/clients/jedis/"
+        category: "db-redis-java"
+        parser: "redis"
+        max_depth: 2
+        max_pages: 40
+
+      # 🔥 H2 Database (테스트/개발용 인메모리 DB)
+      - name: "h2-reference"
+        url: "https://h2database.com/html/commands.html"
+        category: "db-h2-reference"
+        parser: "generic"
+        max_depth: 1
+        max_pages: 30
+
+    output_dir: "data/database"
+    delay_seconds: 1.5
+
+  custom:
+    enabled: false
+    input_dir: "data/custom"
+    # 오빠가 직접 넣을 문서들 (마크다운, 텍스트 등)
+
+settings:
+  max_concurrent: 3       # 동시 요청 수 제한
+  timeout_seconds: 30     # 요청 타임아웃
+  retry_count: 3          # 실패 시 재시도 횟수
+  user_agent: "NoriAI-Collector/1.0 (Java-Dev-Helper)"
+  log_file: "collector.log"

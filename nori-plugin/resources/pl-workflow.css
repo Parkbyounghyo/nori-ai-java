@@ -1,0 +1,270 @@
+/* ═══════════════════════════════════════
+   Nori AI — PL 워크플로우 소스 카드 스타일
+   ═══════════════════════════════════════ */
+
+/* ── 소스 카드 ── */
+.nori-source-card {
+  background: #252526;
+  border: 1px solid #3c3c3c;
+  border-radius: 8px;
+  padding: 16px;
+  margin: 12px 0;
+}
+
+/* ── 파일 정보 (박스 바깥) ── */
+.nori-file-info {
+  margin-bottom: 10px;
+}
+.nori-file-info .file-name {
+  font-size: 14px;
+  font-weight: bold;
+  color: #ffffff;
+  margin-bottom: 4px;
+}
+.nori-file-info .file-path {
+  font-size: 12px;
+  color: #4fc1ff;
+  text-decoration: none;
+  display: block;
+  margin-bottom: 2px;
+}
+.nori-file-info .file-path:hover {
+  text-decoration: underline;
+}
+.nori-file-info .file-line {
+  font-size: 12px;
+  color: #cccccc;
+  margin-bottom: 2px;
+}
+.nori-file-info .test-result {
+  font-size: 12px;
+  margin-bottom: 4px;
+}
+.nori-file-info .test-result.pass { color: #4ec9b0; }
+.nori-file-info .test-result.fail { color: #f44747; }
+.nori-file-info .test-result.skip { color: #888888; }
+.nori-file-info .test-result.wait { color: #e8a317; }
+
+/* ── 소스 박스 (순수 코드만) ── */
+.nori-source-box {
+  width: 100%;
+  max-height: 250px;
+  overflow-y: auto;
+  background: #1e1e1e;
+  border: 1px solid #333333;
+  border-radius: 6px;
+  padding: 12px 16px;
+  box-sizing: border-box;
+}
+.nori-source-box pre {
+  margin: 0;
+  white-space: pre;
+  overflow-x: auto;
+}
+.nori-source-box code {
+  font-family: 'Consolas', 'D2Coding', monospace;
+  font-size: 13px;
+  line-height: 1.5;
+  color: #d4d4d4;
+}
+
+/* 스크롤바 */
+.nori-source-box::-webkit-scrollbar { width: 8px; }
+.nori-source-box::-webkit-scrollbar-track { background: #1e1e1e; }
+.nori-source-box::-webkit-scrollbar-thumb {
+  background: #555555;
+  border-radius: 4px;
+}
+
+/* ── 하단 액션 영역 ── */
+.nori-source-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 6px;
+}
+.action-left {
+  display: flex;
+  gap: 4px;
+}
+.action-right {
+  display: flex;
+}
+
+/* 액션 버튼 (다시/좋아요/안좋아요) */
+.action-btn {
+  background: none;
+  border: 1px solid transparent;
+  cursor: pointer;
+  font-size: 16px;
+  color: #888888;
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: all 0.2s;
+}
+.action-btn:hover {
+  color: #ffffff;
+  background: #3c3c3c;
+  border-color: #555555;
+}
+.action-btn.active-like {
+  color: #4ec9b0;
+  border-color: #4ec9b0;
+}
+.action-btn.active-dislike {
+  color: #f44747;
+  border-color: #f44747;
+}
+
+/* 복사 버튼 */
+.copy-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 18px;
+  color: #888888;
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: all 0.2s;
+}
+.copy-btn:hover {
+  color: #ffffff;
+  background: #3c3c3c;
+}
+
+/* 인라인 코드 카드 (PL 턴 응답용) */
+.nori-inline-card {
+  background: #252526;
+  border: 1px solid #3c3c3c;
+  border-radius: 6px;
+  padding: 8px 12px;
+  margin-bottom: 8px;
+}
+.copy-code-btn {
+  background: #2d2d30;
+  border: 1px solid #555;
+  cursor: pointer;
+  font-size: 13px;
+  color: #cccccc;
+  padding: 6px 12px;
+  border-radius: 4px;
+  margin-top: 6px;
+  transition: all 0.2s;
+}
+.copy-code-btn:hover {
+  color: #ffffff;
+  background: #3c3c3c;
+  border-color: #4fc1ff;
+}
+
+/* ── 진행 상태 ── */
+.nori-progress {
+  font-size: 13px;
+  color: #cccccc;
+  margin: 8px 0;
+  line-height: 1.8;
+}
+.nori-progress .step-loading { color: #e8a317; }
+.nori-progress .step-done { color: #4ec9b0; }
+.nori-progress .step-fail { color: #f44747; }
+.nori-progress .step-skip { color: #888888; }
+
+/* ── 의존성 요청 카드 ── */
+.nori-dep-request-card {
+  background: #2d2d30;
+  border: 1px solid #e8a317;
+  border-radius: 8px;
+  padding: 16px;
+  margin: 12px 0;
+}
+.dep-header {
+  font-size: 14px;
+  font-weight: bold;
+  color: #e8a317;
+  margin-bottom: 12px;
+}
+.dep-body {
+  font-size: 13px;
+  color: #cccccc;
+  line-height: 1.6;
+}
+.dep-item {
+  background: #1e1e1e;
+  border-radius: 4px;
+  padding: 8px 12px;
+  margin: 6px 0;
+}
+.dep-link {
+  color: #4fc1ff;
+  text-decoration: none;
+  font-size: 12px;
+}
+.dep-link:hover { text-decoration: underline; }
+.dep-folder {
+  margin-top: 10px;
+  padding: 8px;
+  background: #1e1e1e;
+  border-radius: 4px;
+}
+.dep-folder code { color: #dcdcaa; }
+
+/* 완료/건너뛰기 버튼 */
+.dep-actions {
+  display: flex;
+  justify-content: center;
+  gap: 16px;
+  margin-top: 16px;
+}
+.dep-btn {
+  padding: 8px 24px;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.dep-btn-ok {
+  background: #2ea043;
+  color: #ffffff;
+}
+.dep-btn-ok:hover { background: #3fb950; }
+.dep-btn-skip {
+  background: #555555;
+  color: #dddddd;
+}
+.dep-btn-skip:hover { background: #666666; }
+
+/* ── 보고서 카드 ── */
+.nori-report-card {
+  background: #252526;
+  border: 1px solid #4ec9b0;
+  border-radius: 8px;
+  padding: 16px;
+  margin: 12px 0;
+  font-size: 13px;
+  color: #cccccc;
+  line-height: 1.6;
+}
+.nori-report-card .report-title {
+  font-size: 15px;
+  font-weight: bold;
+  color: #4ec9b0;
+  margin-bottom: 8px;
+}
+.nori-report-card .report-item {
+  margin: 2px 0;
+}
+
+/* ── 검증 불가 사유 박스 ── */
+.nori-reason-box {
+  background: #2d2d30;
+  border: 1px solid #555;
+  border-radius: 6px;
+  padding: 10px 14px;
+  margin: 8px 0;
+  font-size: 12px;
+  color: #aaaaaa;
+  line-height: 1.6;
+}
+
+/* 턴 진행 바 — 제거됨, nori-file-label로 대체 */

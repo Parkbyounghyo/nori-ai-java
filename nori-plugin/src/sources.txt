@@ -1,0 +1,6 @@
+C:\nori-ai-java\nori-plugin\src\nori\ai\plugin\NoriConstants.java
+C:\nori-ai-java\nori-plugin\src\nori\ai\plugin\NoriPlugin.java
+C:\nori-ai-java\nori-plugin\src\nori\ai\plugin\handlers\NoriCommandHandler.java
+C:\nori-ai-java\nori-plugin\src\nori\ai\plugin\preferences\NoriPreferencePage.java
+C:\nori-ai-java\nori-plugin\src\nori\ai\plugin\service\NoriApiClient.java
+C:\nori-ai-java\nori-plugin\src\nori\ai\plugin\views\NoriSideView.java

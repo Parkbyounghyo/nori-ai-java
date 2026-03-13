@@ -1,0 +1,860 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Nori AI — 수집/임베딩 관리</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Segoe UI', -apple-system, sans-serif;
+      background: #0f172a; color: #e2e8f0;
+      min-height: 100vh; padding: 2rem;
+    }
+    h1 { font-size: 1.5rem; margin-bottom: 1.5rem; color: #f1f5f9; }
+    h2 { font-size: 1.1rem; margin-bottom: 0.8rem; color: #94a3b8; font-weight: 500; }
+
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 2rem; }
+    @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
+
+    .card {
+      background: #1e293b; border-radius: 12px; padding: 1.5rem;
+      border: 1px solid #334155;
+    }
+
+    /* 상태 테이블 */
+    table { width: 100%; border-collapse: collapse; }
+    th, td { padding: 0.6rem 0.8rem; text-align: left; border-bottom: 1px solid #334155; }
+    th { color: #94a3b8; font-weight: 500; font-size: 0.85rem; text-transform: uppercase; }
+    td { font-size: 0.9rem; }
+
+    .badge {
+      display: inline-block; padding: 0.15rem 0.5rem; border-radius: 9999px;
+      font-size: 0.75rem; font-weight: 600;
+    }
+    .badge-synced { background: #065f46; color: #6ee7b7; }
+    .badge-not-embedded { background: #7c2d12; color: #fdba74; }
+    .badge-empty { background: #334155; color: #64748b; }
+
+    .num { font-variant-numeric: tabular-nums; text-align: right; }
+
+    /* 바 차트 */
+    .bar-wrap { display: flex; align-items: center; gap: 0.5rem; }
+    .bar { height: 8px; border-radius: 4px; min-width: 2px; transition: width 0.4s; }
+    .bar-collected { background: #3b82f6; }
+    .bar-embedded { background: #22c55e; }
+
+    /* 폼 */
+    .form-group { margin-bottom: 1rem; }
+    label { display: block; font-size: 0.85rem; color: #94a3b8; margin-bottom: 0.3rem; }
+    input, select {
+      width: 100%; padding: 0.5rem 0.7rem; border-radius: 8px;
+      border: 1px solid #475569; background: #0f172a; color: #e2e8f0;
+      font-size: 0.9rem; outline: none;
+    }
+    input:focus, select:focus { border-color: #3b82f6; }
+
+    .btn {
+      padding: 0.5rem 1.2rem; border-radius: 8px; border: none;
+      font-size: 0.9rem; font-weight: 600; cursor: pointer;
+      transition: all 0.2s;
+    }
+    .btn-primary { background: #3b82f6; color: white; }
+    .btn-primary:hover { background: #2563eb; }
+    .btn-primary:disabled { background: #475569; cursor: not-allowed; }
+    .btn-green { background: #22c55e; color: white; }
+    .btn-green:hover { background: #16a34a; }
+    .btn-orange { background: #f97316; color: white; }
+    .btn-orange:hover { background: #ea580c; }
+    .btn-sm { padding: 0.3rem 0.7rem; font-size: 0.8rem; }
+
+    .inline-btns { display: flex; gap: 0.4rem; align-items: center; }
+
+    .template-info {
+      margin-bottom: 0.8rem;
+      padding: 0.55rem 0.75rem;
+      border-radius: 8px;
+      border: 1px solid #334155;
+      font-size: 0.84rem;
+      color: #cbd5e1;
+      background: #0f172a;
+    }
+    .template-info.ok {
+      border-color: #065f46;
+      background: #052e25;
+      color: #86efac;
+    }
+    .template-info.warn {
+      border-color: #7c2d12;
+      background: #3a1d11;
+      color: #fdba74;
+    }
+
+    /* 알림 */
+    .toast {
+      position: fixed; top: 1rem; right: 1rem; padding: 0.8rem 1.2rem;
+      border-radius: 8px; font-size: 0.9rem; font-weight: 500;
+      transform: translateX(120%); transition: transform 0.3s; z-index: 999;
+    }
+    .toast.show { transform: translateX(0); }
+    .toast-success { background: #065f46; color: #6ee7b7; border: 1px solid #059669; }
+    .toast-error { background: #7c2d12; color: #fca5a5; border: 1px solid #dc2626; }
+    .toast-info { background: #1e3a5f; color: #93c5fd; border: 1px solid #3b82f6; }
+
+    .spinner {
+      display: inline-block; width: 14px; height: 14px;
+      border: 2px solid rgba(255,255,255,0.3); border-top-color: white;
+      border-radius: 50%; animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .embed-banner {
+      background: #1e3a5f; border: 1px solid #3b82f6; border-radius: 8px;
+      padding: 0.8rem 1rem; margin-bottom: 1rem; display: none;
+      font-size: 0.9rem; color: #93c5fd;
+    }
+    .embed-banner.active { display: flex; align-items: center; gap: 0.5rem; }
+
+    .top-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; }
+    .refresh-btn { background: none; border: 1px solid #475569; color: #94a3b8; cursor: pointer; padding: 0.4rem 0.8rem; border-radius: 6px; font-size: 0.85rem; }
+    .refresh-btn:hover { border-color: #3b82f6; color: #3b82f6; }
+
+    /* 임베딩 타겟 체크박스 */
+    .embed-item { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem; cursor: pointer; color: #e2e8f0; font-size: 0.9rem; }
+    .embed-item input[type="checkbox"] { width: auto; margin: 0; accent-color: #22c55e; }
+    .embed-item .embed-name { min-width: 90px; }
+    .embed-item .embed-count { color: #64748b; font-size: 0.8rem; }
+
+    /* 모달 */
+    .modal-overlay {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.6);
+      display: none; align-items: center; justify-content: center; z-index: 1000;
+    }
+    .modal-overlay.open { display: flex; }
+    .modal {
+      background: #1e293b; border: 1px solid #475569; border-radius: 12px;
+      padding: 1.5rem; width: 90%; max-width: 700px; max-height: 80vh;
+      display: flex; flex-direction: column;
+    }
+    .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
+    .modal-header h3 { font-size: 1.1rem; color: #f1f5f9; }
+    .modal-close { background: none; border: none; color: #94a3b8; font-size: 1.3rem; cursor: pointer; padding: 0.2rem 0.5rem; }
+    .modal-close:hover { color: #f1f5f9; }
+    .modal-body { overflow-y: auto; flex: 1; }
+    .source-item {
+      padding: 0.6rem 0.8rem; border-bottom: 1px solid #334155;
+      display: flex; align-items: flex-start; gap: 0.8rem;
+    }
+    .source-item:last-child { border-bottom: none; }
+    .source-name { font-weight: 600; color: #e2e8f0; min-width: 160px; font-size: 0.9rem; }
+    .source-url { color: #60a5fa; font-size: 0.8rem; word-break: break-all; }
+    .source-meta { color: #64748b; font-size: 0.78rem; margin-top: 0.2rem; }
+    .source-link { color: #60a5fa; font-size: 0.8rem; cursor: pointer; text-decoration: underline; }
+    .source-link:hover { color: #93c5fd; }
+
+    /* 시스템 모니터 */
+    .monitor-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 2rem; }
+    @media (max-width: 900px) { .monitor-grid { grid-template-columns: 1fr; } }
+    .gauge-row { display: flex; align-items: center; gap: 0.8rem; margin-bottom: 0.8rem; }
+    .gauge-label { min-width: 55px; font-size: 0.85rem; color: #94a3b8; font-weight: 500; }
+    .gauge-track { flex: 1; height: 18px; background: #334155; border-radius: 9px; overflow: hidden; position: relative; }
+    .gauge-fill { height: 100%; border-radius: 9px; transition: width 0.6s ease; }
+    .gauge-fill.cpu { background: linear-gradient(90deg, #3b82f6, #60a5fa); }
+    .gauge-fill.ram { background: linear-gradient(90deg, #22c55e, #4ade80); }
+    .gauge-fill.gpu { background: linear-gradient(90deg, #f59e0b, #fbbf24); }
+    .gauge-fill.vram { background: linear-gradient(90deg, #a855f7, #c084fc); }
+    .gauge-value { min-width: 50px; text-align: right; font-size: 0.85rem; font-weight: 600; color: #e2e8f0; font-variant-numeric: tabular-nums; }
+    .gauge-detail { font-size: 0.75rem; color: #64748b; min-width: 100px; text-align: right; }
+
+    .task-list { list-style: none; padding: 0; }
+    .task-item { padding: 0.5rem 0.6rem; border-bottom: 1px solid #334155; display: flex; align-items: center; gap: 0.5rem; font-size: 0.85rem; }
+    .task-item:last-child { border-bottom: none; }
+    .task-icon { font-size: 0.9rem; }
+    .task-name { flex: 1; color: #e2e8f0; }
+    .task-msg { color: #94a3b8; font-size: 0.78rem; max-width: 200px; text-overflow: ellipsis; overflow: hidden; white-space: nowrap; }
+    .task-time { color: #64748b; font-size: 0.75rem; min-width: 60px; text-align: right; }
+    .empty-msg { color: #64748b; font-size: 0.85rem; padding: 0.5rem; }
+
+    /* 모달 체크박스 */
+    .source-check { width: auto; margin: 0; accent-color: #3b82f6; flex-shrink: 0; margin-top: 3px; }
+    .modal-footer { margin-top: 1rem; display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
+    .select-all-wrap { display: flex; align-items: center; gap: 0.4rem; font-size: 0.85rem; color: #94a3b8; cursor: pointer; margin-right: auto; }
+    .select-all-wrap input { width: auto; accent-color: #3b82f6; }
+  </style>
+</head>
+<body>
+
+<div class="top-bar">
+  <h1>🍜 Nori AI — 수집/임베딩 관리</h1>
+  <button class="refresh-btn" onclick="loadStatus()">🔄 새로고침</button>
+</div>
+
+<div id="embedBanner" class="embed-banner">
+  <span class="spinner"></span>
+  <span id="embedBannerText">임베딩 실행 중...</span>
+</div>
+
+<div id="collectBanner" class="embed-banner" style="background:#1e3f2a; border-color:#22c55e;">
+  <span class="spinner" style="border-top-color:#22c55e;"></span>
+  <span id="collectBannerText" style="color:#86efac;">수집 실행 중...</span>
+</div>
+
+<!-- 시스템 모니터 -->
+<div class="monitor-grid">
+  <div class="card">
+    <h2>🖥️ 시스템 리소스</h2>
+    <div id="sysGauges">
+      <div class="gauge-row">
+        <span class="gauge-label">CPU</span>
+        <div class="gauge-track"><div class="gauge-fill cpu" id="cpuBar" style="width:0%"></div></div>
+        <span class="gauge-value" id="cpuVal">—</span>
+      </div>
+      <div class="gauge-row">
+        <span class="gauge-label">RAM</span>
+        <div class="gauge-track"><div class="gauge-fill ram" id="ramBar" style="width:0%"></div></div>
+        <span class="gauge-value" id="ramVal">—</span>
+        <span class="gauge-detail" id="ramDetail"></span>
+      </div>
+      <div class="gauge-row">
+        <span class="gauge-label">GPU</span>
+        <div class="gauge-track"><div class="gauge-fill gpu" id="gpuBar" style="width:0%"></div></div>
+        <span class="gauge-value" id="gpuVal">—</span>
+      </div>
+      <div class="gauge-row">
+        <span class="gauge-label">VRAM</span>
+        <div class="gauge-track"><div class="gauge-fill vram" id="vramBar" style="width:0%"></div></div>
+        <span class="gauge-value" id="vramVal">—</span>
+        <span class="gauge-detail" id="vramDetail"></span>
+      </div>
+    </div>
+    <div id="gpuName" style="font-size:0.75rem; color:#64748b; margin-top:0.5rem;"></div>
+  </div>
+
+  <div class="card">
+    <h2>⚙️ 백그라운드 작업</h2>
+    <div id="runningTasks"><p class="empty-msg">실행 중인 작업이 없습니다.</p></div>
+    <h2 style="margin-top:1.2rem;">📋 최근 완료</h2>
+    <div id="recentTasks"><p class="empty-msg">기록이 없습니다.</p></div>
+  </div>
+</div>
+
+<!-- 상태 대시보드 -->
+<div class="card" style="margin-bottom: 1.5rem;">
+  <h2>📊 수집/임베딩 현황</h2>
+  <div id="templateCollectionInfo" class="template-info">자바 템플릿 자료 수집 포함 여부 확인 중...</div>
+  <table>
+    <thead>
+      <tr>
+        <th>소스</th>
+        <th class="num">수집 파일</th>
+        <th class="num">임베딩 청크</th>
+        <th>비율</th>
+        <th>상태</th>
+        <th>액션</th>
+      </tr>
+    </thead>
+    <tbody id="statusBody"></tbody>
+  </table>
+</div>
+
+<div class="grid">
+  <!-- URL 수집 -->
+  <div class="card">
+    <h2>🔗 URL 수집</h2>
+    <div class="form-group">
+      <label>URL</label>
+      <input type="url" id="collectUrl" placeholder="https://docs.example.com/page">
+    </div>
+    <div class="form-group">
+      <label>카테고리</label>
+      <select id="collectCategory">
+        <option value="custom">custom (직접 추가)</option>
+        <option value="web-ui">web-ui</option>
+        <option value="desktop-ui">desktop-ui</option>
+        <option value="community">community</option>
+        <option value="database">database</option>
+        <option value="spring">spring</option>
+        <option value="egov">egov</option>
+        <option value="javadoc">javadoc</option>
+      </select>
+    </div>
+    <div style="display: flex; gap: 1rem;">
+      <div class="form-group" style="flex:1;">
+        <label>최대 깊이</label>
+        <input type="number" id="collectDepth" value="1" min="0" max="3">
+      </div>
+      <div class="form-group" style="flex:1;">
+        <label>최대 페이지</label>
+        <input type="number" id="collectPages" value="20" min="1" max="100">
+      </div>
+    </div>
+    <button class="btn btn-primary" onclick="collectFromUrl()" id="collectBtn">📥 수집 시작</button>
+  </div>
+
+  <!-- 일괄 임베딩 -->
+  <div class="card">
+    <h2>⚡ 일괄 임베딩</h2>
+    <p style="font-size: 0.85rem; color: #94a3b8; margin-bottom: 1rem;">
+      미임베딩 소스를 선택하여 벡터 DB에 적재합니다.
+    </p>
+    <div id="embedTargets" style="margin-bottom: 1rem;"></div>
+    <button class="btn btn-green" onclick="embedSelected()" id="embedBtn">🚀 선택 항목 임베딩</button>
+    <div id="embedLastResult" style="margin-top:0.8rem; display:none; padding:0.5rem 0.8rem; border-radius:8px; font-size:0.85rem;"></div>
+  </div>
+</div>
+
+<div id="toast" class="toast"></div>
+
+<!-- 수집대상 모달 -->
+<div id="sourcesModal" class="modal-overlay" onclick="if(event.target===this)closeModal()">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 id="modalTitle">수집대상 목록</h3>
+      <button class="modal-close" onclick="closeModal()">&times;</button>
+    </div>
+    <div class="modal-body" id="modalBody"></div>
+    <div class="modal-footer">
+      <label class="select-all-wrap">
+        <input type="checkbox" id="modalSelectAll" onchange="toggleAllSources(this.checked)">
+        전체 선택
+      </label>
+      <button class="btn btn-sm btn-primary" id="modalRefreshSelected" onclick="modalRefreshSelected()">🔄 선택 항목 갱신</button>
+      <button class="btn btn-sm" style="background:#6366f1;color:white" id="modalUpdateBtn" onclick="modalUpdate()">📥 전체 업데이트</button>
+      <button class="btn btn-orange btn-sm" id="modalRefreshBtn" onclick="modalRefresh()">🔄 전체 새로 수집</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const API_BASE = '/api/v1/admin';
+let statusData = [];
+let pollId = null;
+let sysMonitorId = null;
+let prevEmbedRunning = false;
+let prevCollecting = {};  // 타겟별 이전 수집 상태
+let prevCollectAny = false;
+let loadingStatus = false;  // loadStatus 중복 호출 방지
+let sourceMetaCache = null;
+let sourceMetaLoadedAt = 0;
+
+async function api(path, method = 'GET', body = null) {
+  const opts = { method, headers: { 'Content-Type': 'application/json' } };
+  if (body) opts.body = JSON.stringify(body);
+  const res = await fetch(API_BASE + path, opts);
+  return res.json();
+}
+
+function showToast(msg, type = 'info') {
+  const t = document.getElementById('toast');
+  t.className = 'toast toast-' + type + ' show';
+  t.textContent = msg;
+  setTimeout(() => t.classList.remove('show'), 5000);
+}
+
+function fmtNum(n) { return n.toLocaleString(); }
+
+function escHtml(v) {
+  return String(v || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/\"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function isTemplateSource(src) {
+  const keys = ['thymeleaf', 'jsp', 'jstl', 'freemarker', 'mustache', 'velocity', 'template'];
+  const values = [
+    src && src.name,
+    src && src.category,
+    src && src.tags,
+    src && src.url,
+  ]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase();
+  return keys.some(k => values.includes(k));
+}
+
+async function ensureSourceMetaLoaded(force = false) {
+  const now = Date.now();
+  if (!force && sourceMetaCache && (now - sourceMetaLoadedAt) < 120000) return;
+
+  const targets = ['javadoc', 'spring', 'web-ui', 'desktop-ui', 'community', 'egov', 'database'];
+  const pairs = await Promise.all(targets.map(async (target) => {
+    try {
+      const res = await api('/sources/' + target);
+      if (res && res.success) return [target, res.data.sources || []];
+      return [target, []];
+    } catch (e) {
+      return [target, []];
+    }
+  }));
+
+  sourceMetaCache = Object.fromEntries(pairs);
+  sourceMetaLoadedAt = now;
+}
+
+function renderTemplateCollectionInfo(sources) {
+  const infoEl = document.getElementById('templateCollectionInfo');
+  if (!infoEl) return;
+
+  if (!sourceMetaCache) {
+    infoEl.className = 'template-info';
+    infoEl.textContent = '자바 템플릿 자료 수집 포함 여부 확인 중...';
+    return;
+  }
+
+  const hits = [];
+  for (const s of sources || []) {
+    const target = s.target;
+    if (!target || target === 'custom') continue;
+    const list = sourceMetaCache[target] || [];
+    const matched = list.filter(isTemplateSource);
+    if (matched.length > 0) {
+      hits.push({
+        target,
+        names: matched.slice(0, 3).map(x => x.name || x.category || x.url || 'template')
+      });
+    }
+  }
+
+  if (hits.length > 0) {
+    const targetNames = hits.map(h => h.target).join(', ');
+    const sampleNames = hits
+      .map(h => h.names.join('/'))
+      .filter(Boolean)
+      .slice(0, 2)
+      .join(' | ');
+    infoEl.className = 'template-info ok';
+    infoEl.innerHTML = `자바 템플릿 자료 수집은 기존 타이틀(<strong>${escHtml(targetNames)}</strong>)에 포함되어 있습니다.${sampleNames ? ` 예: ${escHtml(sampleNames)}` : ''}`;
+    return;
+  }
+
+  infoEl.className = 'template-info warn';
+  infoEl.textContent = '자바 템플릿 자료 수집 항목이 기존 타이틀에 확인되지 않습니다. 별도 타이틀 생성이 필요합니다.';
+}
+
+let pollInterval = 0;
+
+function startPolling(interval = 3000) {
+  if (pollId && pollInterval === interval) return;  // 이미 같은 간격으로 실행 중
+  if (pollId) clearInterval(pollId);
+  pollInterval = interval;
+  pollId = setInterval(loadStatus, interval);
+}
+
+function stopPolling() {
+  if (pollId) { clearInterval(pollId); pollId = null; pollInterval = 0; }
+}
+
+async function loadStatus() {
+  if (loadingStatus) return;  // 이전 호출 완료 전 중복 방지
+  loadingStatus = true;
+  try {
+  const res = await api('/status');
+  if (!res.success) { showToast('상태 조회 실패: ' + res.error, 'error'); return; }
+  statusData = res.data.sources;
+  await ensureSourceMetaLoaded();
+  renderTemplateCollectionInfo(statusData);
+  const collectStatus = res.data.collect_status || {};
+  renderStatus(statusData, collectStatus);
+  renderEmbedTargets(statusData);
+
+  // 임베딩 배너
+  const embedRunning = res.data.embed_running;
+  if (embedRunning) {
+    document.getElementById('embedBanner').classList.add('active');
+    document.getElementById('embedBannerText').textContent =
+      `임베딩 실행 중: ${res.data.embed_target} — ${res.data.embed_message}`;
+  } else {
+    document.getElementById('embedBanner').classList.remove('active');
+    // 완료 감지: 이전에 running이었는데 이제 아님
+    if (prevEmbedRunning && !embedRunning) {
+      showToast(`✅ 임베딩 완료! (${res.data.embed_message})`, 'success');
+    }
+  }
+  prevEmbedRunning = embedRunning;
+
+  // 마지막 임베딩 결과 상시 표시
+  const lastResult = document.getElementById('embedLastResult');
+  if (embedRunning) {
+    lastResult.style.display = 'block';
+    lastResult.style.background = '#1e3a5f';
+    lastResult.style.color = '#93c5fd';
+    lastResult.style.border = '1px solid #3b82f6';
+    lastResult.innerHTML = `<span class="spinner" style="width:12px;height:12px;border-width:1.5px;"></span> 실행 중: ${res.data.embed_target} — ${res.data.embed_message}`;
+  } else if (res.data.embed_finished_at) {
+    lastResult.style.display = 'block';
+    const ok = res.data.embed_success;
+    lastResult.style.background = ok ? '#1e3f2a' : '#3f1e1e';
+    lastResult.style.color = ok ? '#86efac' : '#fca5a5';
+    lastResult.style.border = `1px solid ${ok ? '#22c55e' : '#dc2626'}`;
+    lastResult.innerHTML = `${ok ? '✅' : '❌'} ${res.data.embed_target}: ${res.data.embed_message} <span style="color:#64748b;font-size:0.78rem;">(${res.data.embed_finished_at})</span>`;
+  } else {
+    lastResult.style.display = 'none';
+  }
+
+  // 수집 배너
+  const collecting = Object.entries(collectStatus)
+    .filter(([, v]) => v.running)
+    .map(([k]) => k);
+  const anyCollecting = collecting.length > 0;
+
+  if (anyCollecting) {
+    document.getElementById('collectBanner').classList.add('active');
+    const msgs = collecting.map(t => {
+      const s = collectStatus[t];
+      return `${t}: ${s.message}`;
+    }).join(' | ');
+    document.getElementById('collectBannerText').textContent = `수집 실행 중: ${msgs}`;
+  } else {
+    document.getElementById('collectBanner').classList.remove('active');
+  }
+
+  // 수집 완료 감지 (타겟별)
+  for (const [target, info] of Object.entries(collectStatus)) {
+    const wasRunning = prevCollecting[target];
+    if (wasRunning && !info.running) {
+      if (info.success) {
+        showToast(`✅ '${target}' 수집 완료!`, 'success');
+      } else {
+        showToast(`❌ '${target}' 수집 실패: ${info.message}`, 'error');
+      }
+    }
+    prevCollecting[target] = info.running;
+  }
+
+  // 폴링 관리: 작업 중이면 빠른 폴링(3초), 아니면 느린 폴링(15초)
+  if (embedRunning || anyCollecting) {
+    startPolling(3000);
+  } else {
+    startPolling(15000);
+  }
+  } finally { loadingStatus = false; }
+}
+
+function renderStatus(sources, collectStatus) {
+  const maxFiles = Math.max(...sources.map(s => s.collected_files), 1);
+  const maxChunks = Math.max(...sources.map(s => s.embedded_chunks), 1);
+
+  let html = '';
+  for (const s of sources) {
+    const badgeClass = s.status === 'synced' ? 'badge-synced'
+                     : s.status === 'not_embedded' ? 'badge-not-embedded'
+                     : 'badge-empty';
+    const badgeText = s.status === 'synced' ? '동기화됨'
+                    : s.status === 'not_embedded' ? '미임베딩'
+                    : '없음';
+
+    const fileW = Math.max((s.collected_files / maxFiles) * 100, 2);
+    const chunkW = Math.max((s.embedded_chunks / maxChunks) * 100, 2);
+
+    // 수집 상태 표시
+    const cs = collectStatus && collectStatus[s.target];
+    let collectIndicator = '';
+    if (cs && cs.running) {
+      collectIndicator = `<div style="margin-top:0.3rem;"><span class="spinner" style="width:12px;height:12px;border-width:1.5px;"></span> <span style="font-size:0.78rem;color:#86efac;">${cs.message}</span></div>`;
+    } else if (cs && cs.finished_at && cs.success !== null) {
+      const icon = cs.success ? '✅' : '❌';
+      collectIndicator = `<div style="margin-top:0.3rem;font-size:0.78rem;color:${cs.success ? '#86efac' : '#fca5a5'};">${icon} ${cs.message}</div>`;
+    }
+
+    html += `<tr>
+      <td>
+        <strong>${s.target}</strong>
+        ${s.target !== 'custom' ? `<br><span class="source-link" onclick="showSources('${s.target}')">수집대상 보기</span>` : ''}
+        ${collectIndicator}
+      </td>
+      <td class="num">${fmtNum(s.collected_files)}</td>
+      <td class="num">${fmtNum(s.embedded_chunks)}</td>
+      <td>
+        <div class="bar-wrap">
+          <div class="bar bar-collected" style="width:${fileW}px" title="수집"></div>
+          <div class="bar bar-embedded" style="width:${chunkW}px" title="임베딩"></div>
+        </div>
+      </td>
+      <td><span class="badge ${badgeClass}">${badgeText}</span></td>
+      <td>
+        <div class="inline-btns">
+          ${s.status === 'not_embedded' ? `<button class="btn btn-green btn-sm" onclick="embedOne('${s.target}')">임베딩</button>` : ''}
+          ${s.target !== 'custom' ? `<button class="btn btn-sm" style="background:#6366f1;color:white" onclick="updateOne('${s.target}')" ${cs && cs.running ? 'disabled' : ''}>업데이트</button>` : ''}
+          ${s.status !== 'empty' && s.target !== 'custom' ? `<button class="btn btn-orange btn-sm" onclick="refreshOne('${s.target}')" ${cs && cs.running ? 'disabled' : ''}>새로 수집</button>` : ''}
+        </div>
+      </td>
+    </tr>`;
+  }
+  document.getElementById('statusBody').innerHTML = html;
+}
+
+function renderEmbedTargets(sources) {
+  const notEmbedded = sources.filter(s => s.status === 'not_embedded' || s.status === 'synced');
+  let html = '';
+  for (const s of notEmbedded) {
+    const checked = s.status === 'not_embedded' ? 'checked' : '';
+    html += `<label class="embed-item">
+      <input type="checkbox" value="${s.target}" ${checked}>
+      <span class="embed-name">${s.target}</span>
+      <span class="embed-count">(${fmtNum(s.collected_files)} 파일)</span>
+    </label>`;
+  }
+  document.getElementById('embedTargets').innerHTML = html || '<p style="color:#64748b;">수집된 데이터가 없습니다.</p>';
+}
+
+async function collectFromUrl() {
+  const url = document.getElementById('collectUrl').value.trim();
+  if (!url) { showToast('URL을 입력해주세요.', 'error'); return; }
+
+  const btn = document.getElementById('collectBtn');
+  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> 수집 중...';
+
+  const res = await api('/collect-url', 'POST', {
+    url,
+    category: document.getElementById('collectCategory').value,
+    max_depth: parseInt(document.getElementById('collectDepth').value),
+    max_pages: parseInt(document.getElementById('collectPages').value),
+  });
+
+  btn.disabled = false; btn.innerHTML = '📥 수집 시작';
+
+  if (res.success) {
+    if (res.data.duplicate) {
+      showToast(res.data.message, 'info');
+    } else {
+      showToast(res.data.message, 'success');
+      document.getElementById('collectUrl').value = '';
+      loadStatus();
+    }
+  } else {
+    showToast(res.error, 'error');
+  }
+}
+
+async function embedSelected() {
+  const targets = [...document.querySelectorAll('#embedTargets input:checked')].map(el => el.value);
+  if (!targets.length) { showToast('임베딩할 타겟을 선택해주세요.', 'error'); return; }
+
+  const btn = document.getElementById('embedBtn');
+  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> 시작 중...';
+
+  const res = await api('/embed', 'POST', { targets });
+
+  btn.disabled = false; btn.innerHTML = '🚀 선택 항목 임베딩';
+
+  if (res.success) {
+    showToast(res.data.message, 'success');
+    startPolling();
+    loadStatus();
+  } else {
+    showToast(res.error, 'error');
+  }
+}
+
+async function embedOne(target) {
+  const res = await api('/embed', 'POST', { targets: [target] });
+  if (res.success) {
+    showToast(`${target} 임베딩을 시작합니다.`, 'success');
+    startPolling();
+    loadStatus();
+  } else {
+    showToast(res.error, 'error');
+  }
+}
+
+async function updateOne(target) {
+  const res = await api('/update', 'POST', { target });
+  if (res.success) {
+    showToast(res.data.message, 'success');
+    startPolling();
+    loadStatus();
+  } else {
+    showToast(res.error, 'error');
+  }
+}
+
+async function refreshOne(target) {
+  if (!confirm(`'${target}' 소스를 새로 수집하시겠습니까?\n기존 수집 이력을 초기화하고 처음부터 수집합니다.`)) return;
+
+  const res = await api('/refresh', 'POST', { target });
+  if (res.success) {
+    showToast(res.data.message, 'success');
+    startPolling();
+    loadStatus();
+  } else {
+    showToast(res.error, 'error');
+  }
+}
+
+// ── 수집대상 모달 ──
+let currentModalTarget = null;
+
+async function showSources(target) {
+  currentModalTarget = target;
+  document.getElementById('modalTitle').textContent = `📋 ${target} — 수집대상 목록`;
+  document.getElementById('modalBody').innerHTML = '<p style="color:#94a3b8;">로딩 중...</p>';
+  document.getElementById('modalSelectAll').checked = false;
+  document.getElementById('sourcesModal').classList.add('open');
+
+  const res = await api('/sources/' + target);
+  if (!res.success) {
+    document.getElementById('modalBody').innerHTML = `<p style="color:#fca5a5;">로딩 실패: ${res.error}</p>`;
+    return;
+  }
+
+  const sources = res.data.sources;
+  if (!sources || sources.length === 0) {
+    document.getElementById('modalBody').innerHTML = '<p style="color:#94a3b8;">등록된 수집대상이 없습니다.</p>';
+    return;
+  }
+
+  let html = '';
+  for (const src of sources) {
+    const urlDisplay = src.url ? `<div class="source-url">${src.url}</div>` : '';
+    const tags = src.tags ? `<div class="source-meta">태그: ${src.tags}</div>` : '';
+    const repos = src.repos ? `<div class="source-meta">저장소: ${src.repos}</div>` : '';
+    const meta = [];
+    if (src.category) meta.push(`카테고리: ${src.category}`);
+    if (src.max_pages) meta.push(`최대 ${src.max_pages}페이지`);
+    if (src.max_depth !== undefined) meta.push(`깊이 ${src.max_depth}`);
+    const metaLine = meta.length ? `<div class="source-meta">${meta.join(' · ')}</div>` : '';
+
+    html += `<div class="source-item">
+      <input type="checkbox" class="source-check" value="${src.name}" data-source-name="${src.name}">
+      <div style="flex:1">
+        <div class="source-name">${src.name}</div>
+        ${urlDisplay}${tags}${repos}${metaLine}
+      </div>
+    </div>`;
+  }
+  document.getElementById('modalBody').innerHTML = html;
+}
+
+function closeModal() {
+  document.getElementById('sourcesModal').classList.remove('open');
+  currentModalTarget = null;
+}
+
+function toggleAllSources(checked) {
+  document.querySelectorAll('#modalBody .source-check').forEach(cb => cb.checked = checked);
+}
+
+function getSelectedSourceNames() {
+  return [...document.querySelectorAll('#modalBody .source-check:checked')]
+    .map(el => el.value);
+}
+
+async function modalRefreshSelected() {
+  if (!currentModalTarget) return;
+  const names = getSelectedSourceNames();
+  if (!names.length) { showToast('갱신할 소스를 선택해주세요.', 'error'); return; }
+
+  const res = await api('/refresh-sources', 'POST', {
+    target: currentModalTarget,
+    source_names: names,
+  });
+
+  if (res.success) {
+    showToast(res.data.message, 'success');
+    startPolling();
+    loadStatus();
+  } else {
+    showToast(res.error, 'error');
+  }
+}
+
+async function modalUpdate() {
+  if (!currentModalTarget) return;
+  closeModal();
+  await updateOne(currentModalTarget);
+}
+
+async function modalRefresh() {
+  if (!currentModalTarget) return;
+  const target = currentModalTarget;
+  closeModal();
+  await refreshOne(target);
+}
+
+// ── 시스템 모니터 ──
+async function loadSystemInfo() {
+  try {
+    const res = await api('/system-info');
+    if (!res.success) return;
+    const d = res.data;
+
+    // CPU
+    document.getElementById('cpuBar').style.width = d.cpu_percent + '%';
+    document.getElementById('cpuVal').textContent = d.cpu_percent + '%';
+
+    // RAM
+    document.getElementById('ramBar').style.width = d.ram_percent + '%';
+    document.getElementById('ramVal').textContent = d.ram_percent + '%';
+    document.getElementById('ramDetail').textContent =
+      `${(d.ram_used_mb / 1024).toFixed(1)} / ${(d.ram_total_mb / 1024).toFixed(1)} GB`;
+
+    // GPU
+    if (d.gpu && d.gpu.available) {
+      document.getElementById('gpuBar').style.width = d.gpu.gpu_percent + '%';
+      document.getElementById('gpuVal').textContent = d.gpu.gpu_percent + '%';
+      document.getElementById('vramBar').style.width = d.gpu.vram_percent + '%';
+      document.getElementById('vramVal').textContent = d.gpu.vram_percent + '%';
+      document.getElementById('vramDetail').textContent =
+        `${(d.gpu.vram_used_mb / 1024).toFixed(1)} / ${(d.gpu.vram_total_mb / 1024).toFixed(1)} GB`;
+      document.getElementById('gpuName').textContent = d.gpu.name || '';
+    } else {
+      document.getElementById('gpuVal').textContent = 'N/A';
+      document.getElementById('vramVal').textContent = 'N/A';
+      document.getElementById('gpuName').textContent = 'GPU를 감지할 수 없습니다';
+    }
+
+    // 실행 중 작업
+    let runHtml = '';
+    if (d.running_tasks && d.running_tasks.length > 0) {
+      runHtml = '<ul class="task-list">';
+      for (const t of d.running_tasks) {
+        runHtml += `<li class="task-item">
+          <span class="task-icon"><span class="spinner" style="width:12px;height:12px;border-width:1.5px;"></span></span>
+          <span class="task-name">${t.name}</span>
+          <span class="task-msg">${t.message}</span>
+          ${t.started_at ? `<span class="task-time">${t.started_at}</span>` : ''}
+        </li>`;
+      }
+      runHtml += '</ul>';
+    } else {
+      runHtml = '<p class="empty-msg">실행 중인 작업이 없습니다.</p>';
+    }
+    document.getElementById('runningTasks').innerHTML = runHtml;
+
+    // 최근 완료
+    let recHtml = '';
+    if (d.recent_tasks && d.recent_tasks.length > 0) {
+      recHtml = '<ul class="task-list">';
+      for (const t of d.recent_tasks) {
+        const icon = t.success ? '✅' : '❌';
+        recHtml += `<li class="task-item">
+          <span class="task-icon">${icon}</span>
+          <span class="task-name">${t.name}</span>
+          <span class="task-msg">${t.message}</span>
+          <span class="task-time">${t.finished_at ? t.finished_at.split(' ')[1] : ''}</span>
+        </li>`;
+      }
+      recHtml += '</ul>';
+    } else {
+      recHtml = '<p class="empty-msg">기록이 없습니다.</p>';
+    }
+    document.getElementById('recentTasks').innerHTML = recHtml;
+  } catch (e) { /* ignore */ }
+}
+
+// 시스템 모니터 주기적 업데이트 (5초)
+function startSysMonitor() {
+  loadSystemInfo();
+  if (!sysMonitorId) sysMonitorId = setInterval(loadSystemInfo, 5000);
+}
+
+// 초기 로드
+loadStatus();
+startSysMonitor();
+</script>
+</body>
+</html>

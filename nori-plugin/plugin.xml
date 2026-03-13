@@ -1,0 +1,194 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?eclipse version="3.4"?>
+<plugin>
+
+   <!-- ========== View ========== -->
+   <extension point="org.eclipse.ui.views">
+      <category id="nori.ai.category" name="Nori AI"/>
+      <view
+         id="nori.ai.views.side"
+         name="Nori AI 어시스턴트"
+         category="nori.ai.category"
+         class="nori.ai.plugin.views.NoriSideView"
+         allowMultiple="false"
+         restorable="true"/>
+   </extension>
+
+   <!-- ========== Commands ========== -->
+   <extension point="org.eclipse.ui.commands">
+      <category id="nori.ai.commands.category" name="Nori AI" description="Nori AI 코드 도우미"/>
+      <command id="nori.ai.command.explain" name="코드 설명" categoryId="nori.ai.commands.category"/>
+      <command id="nori.ai.command.review" name="코드 리뷰" categoryId="nori.ai.commands.category"/>
+      <command id="nori.ai.command.refactor" name="리팩토링" categoryId="nori.ai.commands.category"/>
+      <command id="nori.ai.command.testGenerate" name="테스트 생성" categoryId="nori.ai.commands.category"/>
+      <command id="nori.ai.command.docGenerate" name="JavaDoc 생성" categoryId="nori.ai.commands.category"/>
+      <command id="nori.ai.command.errorAnalyze" name="에러 분석" categoryId="nori.ai.commands.category"/>
+      <command id="nori.ai.command.errorFix" name="자동 수정" categoryId="nori.ai.commands.category"/>
+      <command id="nori.ai.command.generate" name="코드 생성" categoryId="nori.ai.commands.category"/>
+      <command id="nori.ai.command.schemaScan" name="DB 스키마 스캔" categoryId="nori.ai.commands.category"/>
+      <command id="nori.ai.command.apiScan" name="API 매핑 스캔" categoryId="nori.ai.commands.category"/>
+      <command id="nori.ai.command.errorLog" name="에러 기록" categoryId="nori.ai.commands.category"/>
+      <command id="nori.ai.command.convention" name="코딩 컨벤션" categoryId="nori.ai.commands.category"/>
+      <command id="nori.ai.command.profileUpdate" name="현재 파일 AI 분석" categoryId="nori.ai.commands.category"/>
+   </extension>
+
+   <!-- ========== Handlers ========== -->
+   <extension point="org.eclipse.ui.handlers">
+      <handler commandId="nori.ai.command.explain" class="nori.ai.plugin.handlers.NoriCommandHandler"/>
+      <handler commandId="nori.ai.command.review" class="nori.ai.plugin.handlers.NoriCommandHandler"/>
+      <handler commandId="nori.ai.command.refactor" class="nori.ai.plugin.handlers.NoriCommandHandler"/>
+      <handler commandId="nori.ai.command.testGenerate" class="nori.ai.plugin.handlers.NoriCommandHandler"/>
+      <handler commandId="nori.ai.command.docGenerate" class="nori.ai.plugin.handlers.NoriCommandHandler"/>
+      <handler commandId="nori.ai.command.errorAnalyze" class="nori.ai.plugin.handlers.NoriCommandHandler"/>
+      <handler commandId="nori.ai.command.errorFix" class="nori.ai.plugin.handlers.NoriCommandHandler"/>
+      <handler commandId="nori.ai.command.generate" class="nori.ai.plugin.handlers.NoriCommandHandler"/>
+      <handler commandId="nori.ai.command.schemaScan" class="nori.ai.plugin.handlers.NoriCommandHandler"/>
+      <handler commandId="nori.ai.command.apiScan" class="nori.ai.plugin.handlers.NoriCommandHandler"/>
+      <handler commandId="nori.ai.command.errorLog" class="nori.ai.plugin.handlers.NoriCommandHandler"/>
+      <handler commandId="nori.ai.command.convention" class="nori.ai.plugin.handlers.NoriCommandHandler"/>
+      <handler commandId="nori.ai.command.profileUpdate" class="nori.ai.plugin.handlers.NoriCommandHandler"/>
+   </extension>
+
+   <!-- ========== Editor Context Menu ========== -->
+   <extension point="org.eclipse.ui.menus">
+      <!-- Java 에디터 우클릭 -->
+      <menuContribution locationURI="popup:#CompilationUnitEditorContext?after=additions">
+         <menu id="nori.ai.menu.java" label="Nori AI">
+            <command commandId="nori.ai.command.explain" label="코드 설명" style="push"/>
+            <command commandId="nori.ai.command.review" label="코드 리뷰" style="push"/>
+            <separator name="nori.ai.sep1j" visible="true"/>
+            <command commandId="nori.ai.command.refactor" label="리팩토링" style="push"/>
+            <command commandId="nori.ai.command.testGenerate" label="테스트 생성" style="push"/>
+            <command commandId="nori.ai.command.docGenerate" label="JavaDoc 생성" style="push"/>
+            <separator name="nori.ai.sep2j" visible="true"/>
+            <command commandId="nori.ai.command.errorAnalyze" label="에러 분석" style="push"/>
+            <command commandId="nori.ai.command.errorFix" label="자동 수정" style="push"/>
+            <separator name="nori.ai.sep3j" visible="true"/>
+            <command commandId="nori.ai.command.generate" label="코드 생성" style="push"/>
+            <separator name="nori.ai.sep5j" visible="true"/>
+            <command commandId="nori.ai.command.schemaScan" label="🗂 DB 스키마 스캔" style="push"/>
+            <command commandId="nori.ai.command.apiScan" label="🗺 API 매핑 스캔" style="push"/>
+            <command commandId="nori.ai.command.errorLog" label="📝 에러 기록" style="push"/>
+            <command commandId="nori.ai.command.convention" label="📐 코딩 컨벤션" style="push"/>
+            <separator name="nori.ai.sep6j" visible="true"/>
+            <command commandId="nori.ai.command.profileUpdate" label="🔄 현재 파일 AI 분석" style="push"/>
+         </menu>
+      </menuContribution>
+      <!-- 일반 텍스트 에디터 우클릭 (properties 등) -->
+      <menuContribution locationURI="popup:#TextEditorContext?after=additions">
+         <menu id="nori.ai.menu" label="Nori AI">
+            <command commandId="nori.ai.command.explain" label="코드 설명" style="push"/>
+            <command commandId="nori.ai.command.review" label="코드 리뷰" style="push"/>
+            <separator name="nori.ai.sep1" visible="true"/>
+            <command commandId="nori.ai.command.refactor" label="리팩토링" style="push"/>
+            <command commandId="nori.ai.command.testGenerate" label="테스트 생성" style="push"/>
+            <command commandId="nori.ai.command.docGenerate" label="JavaDoc 생성" style="push"/>
+            <separator name="nori.ai.sep2" visible="true"/>
+            <command commandId="nori.ai.command.errorAnalyze" label="에러 분석" style="push"/>
+            <command commandId="nori.ai.command.errorFix" label="자동 수정" style="push"/>
+            <separator name="nori.ai.sep3" visible="true"/>
+            <command commandId="nori.ai.command.generate" label="코드 생성" style="push"/>
+            <separator name="nori.ai.sep5" visible="true"/>
+            <command commandId="nori.ai.command.schemaScan" label="🗂 DB 스키마 스캔" style="push"/>
+            <command commandId="nori.ai.command.apiScan" label="🗺 API 매핑 스캔" style="push"/>
+            <command commandId="nori.ai.command.errorLog" label="📝 에러 기록" style="push"/>
+            <command commandId="nori.ai.command.convention" label="📐 코딩 컨벤션" style="push"/>
+            <separator name="nori.ai.sep6" visible="true"/>
+            <command commandId="nori.ai.command.profileUpdate" label="🔄 현재 파일 AI 분석" style="push"/>
+         </menu>
+      </menuContribution>
+      <!-- Console 뷰 우클릭 (에러 분석) — Process Console (Tomcat 서버 등) -->
+      <menuContribution locationURI="popup:org.eclipse.debug.ui.ProcessConsoleType.#ContextMenu?after=additions">
+         <menu id="nori.ai.menu.console.process" label="Nori AI">
+            <command commandId="nori.ai.command.errorAnalyze" label="에러 분석" style="push"/>
+            <command commandId="nori.ai.command.errorFix" label="자동 수정" style="push"/>
+            <separator name="nori.ai.sep1cp" visible="true"/>
+            <command commandId="nori.ai.command.errorLog" label="📝 에러 기록" style="push"/>
+         </menu>
+      </menuContribution>
+      <!-- Console 뷰 우클릭 — Message Console (빌드, 일반 출력 등) -->
+      <menuContribution locationURI="popup:org.eclipse.ui.MessageConsoleType.#ContextMenu?after=additions">
+         <menu id="nori.ai.menu.console.msg" label="Nori AI">
+            <command commandId="nori.ai.command.errorAnalyze" label="에러 분석" style="push"/>
+            <command commandId="nori.ai.command.errorFix" label="자동 수정" style="push"/>
+            <separator name="nori.ai.sep1cm" visible="true"/>
+            <command commandId="nori.ai.command.errorLog" label="📝 에러 기록" style="push"/>
+         </menu>
+      </menuContribution>
+      <!-- Console 뷰 우클릭 — 기타 콘솔 (InputOutputConsoleType 등) -->
+      <menuContribution locationURI="popup:org.eclipse.ui.IOConsoleType.#ContextMenu?after=additions">
+         <menu id="nori.ai.menu.console.io" label="Nori AI">
+            <command commandId="nori.ai.command.errorAnalyze" label="에러 분석" style="push"/>
+            <command commandId="nori.ai.command.errorFix" label="자동 수정" style="push"/>
+            <separator name="nori.ai.sep1ci" visible="true"/>
+            <command commandId="nori.ai.command.errorLog" label="📝 에러 기록" style="push"/>
+         </menu>
+      </menuContribution>
+      <!-- WST 구조화 에디터 우클릭 (JSP, HTML, XML, CSS, SQL 등) -->
+      <menuContribution locationURI="popup:org.eclipse.wst.sse.ui.StructuredTextEditor.EditorContext?after=additions">
+         <menu id="nori.ai.menu.wst" label="Nori AI">
+            <command commandId="nori.ai.command.explain" label="코드 설명" style="push"/>
+            <command commandId="nori.ai.command.review" label="코드 리뷰" style="push"/>
+            <separator name="nori.ai.sep1w" visible="true"/>
+            <command commandId="nori.ai.command.refactor" label="리팩토링" style="push"/>
+            <command commandId="nori.ai.command.testGenerate" label="테스트 생성" style="push"/>
+            <command commandId="nori.ai.command.docGenerate" label="JavaDoc 생성" style="push"/>
+            <separator name="nori.ai.sep2w" visible="true"/>
+            <command commandId="nori.ai.command.errorAnalyze" label="에러 분석" style="push"/>
+            <command commandId="nori.ai.command.errorFix" label="자동 수정" style="push"/>
+            <separator name="nori.ai.sep3w" visible="true"/>
+            <command commandId="nori.ai.command.generate" label="코드 생성" style="push"/>
+            <separator name="nori.ai.sep5w" visible="true"/>
+            <command commandId="nori.ai.command.schemaScan" label="🗂 DB 스키마 스캔" style="push"/>
+            <command commandId="nori.ai.command.apiScan" label="🗺 API 매핑 스캔" style="push"/>
+            <command commandId="nori.ai.command.errorLog" label="📝 에러 기록" style="push"/>
+            <command commandId="nori.ai.command.convention" label="📐 코딩 컨벤션" style="push"/>
+            <separator name="nori.ai.sep6w" visible="true"/>
+            <command commandId="nori.ai.command.profileUpdate" label="🔄 현재 파일 AI 분석" style="push"/>
+         </menu>
+      </menuContribution>
+
+      <!-- Main Menu Bar -->
+      <menuContribution locationURI="menu:org.eclipse.ui.main.menu?after=additions">
+         <menu id="nori.ai.mainmenu" label="Nori AI">
+            <command commandId="nori.ai.command.explain" label="코드 설명" style="push"/>
+            <command commandId="nori.ai.command.review" label="코드 리뷰" style="push"/>
+            <separator name="nori.ai.main.sep1" visible="true"/>
+            <command commandId="nori.ai.command.refactor" label="리팩토링" style="push"/>
+            <command commandId="nori.ai.command.testGenerate" label="테스트 생성" style="push"/>
+            <command commandId="nori.ai.command.docGenerate" label="JavaDoc 생성" style="push"/>
+            <separator name="nori.ai.main.sep2" visible="true"/>
+            <command commandId="nori.ai.command.errorAnalyze" label="에러 분석" style="push"/>
+            <command commandId="nori.ai.command.errorFix" label="자동 수정" style="push"/>
+            <separator name="nori.ai.main.sep3" visible="true"/>
+            <command commandId="nori.ai.command.generate" label="코드 생성" style="push"/>
+            <separator name="nori.ai.main.sep5" visible="true"/>
+            <command commandId="nori.ai.command.schemaScan" label="🗂 DB 스키마 스캔" style="push"/>
+            <command commandId="nori.ai.command.apiScan" label="🗺 API 매핑 스캔" style="push"/>
+            <command commandId="nori.ai.command.errorLog" label="📝 에러 기록" style="push"/>
+            <command commandId="nori.ai.command.convention" label="📐 코딩 컨벤션" style="push"/>
+            <separator name="nori.ai.main.sep6" visible="true"/>
+            <command commandId="nori.ai.command.profileUpdate" label="🔄 현재 파일 AI 분석" style="push"/>
+         </menu>
+      </menuContribution>
+   </extension>
+
+   <!-- ========== Preferences ========== -->
+   <extension point="org.eclipse.ui.preferencePages">
+      <page
+         id="nori.ai.preferences"
+         name="Nori AI"
+         class="nori.ai.plugin.preferences.NoriPreferencePage"/>
+   </extension>
+
+   <!-- ========== Java Perspective Extension ========== -->
+   <extension point="org.eclipse.ui.perspectiveExtensions">
+      <perspectiveExtension targetID="org.eclipse.jdt.ui.JavaPerspective">
+         <view
+            id="nori.ai.views.side"
+            relative="org.eclipse.ui.views.ContentOutline"
+            relationship="stack"/>
+      </perspectiveExtension>
+   </extension>
+
+</plugin>
