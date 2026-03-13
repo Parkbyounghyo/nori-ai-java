@@ -24,6 +24,7 @@ public final class NoriConstants {
     public static final String CMD_ERROR_LOG     = "nori.ai.command.errorLog";
     public static final String CMD_CONVENTION    = "nori.ai.command.convention";
     public static final String CMD_PROFILE_UPDATE = "nori.ai.command.profileUpdate";
+    public static final String CMD_PROJECT_ANALYSIS_UPDATE = "nori.ai.command.projectAnalysisUpdate";
 
     // ── Preference Keys ──
     public static final String PREF_SERVER_URL = "nori.ai.serverUrl";

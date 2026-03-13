@@ -24,6 +24,7 @@ import org.eclipse.core.runtime.jobs.Job;
 import org.eclipse.jface.dialogs.MessageDialog;
 import org.eclipse.jface.text.ITextSelection;
 import org.eclipse.jface.viewers.ISelection;
+import org.eclipse.jface.viewers.IStructuredSelection;
 import org.eclipse.swt.widgets.Display;
 import org.eclipse.swt.widgets.Shell;
 import org.eclipse.ui.IEditorPart;
@@ -65,6 +66,11 @@ public class NoriCommandHandler extends AbstractHandler {
         // ── 현재 파일 AI 분석 업데이트 ──
         if (NoriConstants.CMD_PROFILE_UPDATE.equals(commandId)) {
             executeProfileUpdate(event);
+            return null;
+        }
+
+        if (NoriConstants.CMD_PROJECT_ANALYSIS_UPDATE.equals(commandId)) {
+            executeProjectAnalysisUpdate(event);
             return null;
         }
 
@@ -429,33 +435,66 @@ public class NoriCommandHandler extends AbstractHandler {
 
     /** 현재 편집 중인 파일의 AI 설명을 프로필에 업데이트 */
     private void executeProfileUpdate(ExecutionEvent event) {
-        // 현재 에디터에서 파일 경로 가져오기
+        File targetFile = null;
+        IProject project = null;
+
         IEditorPart editor = HandlerUtil.getActiveEditor(event);
-        if (editor == null || !(editor.getEditorInput() instanceof IFileEditorInput)) {
+        if (editor != null && editor.getEditorInput() instanceof IFileEditorInput) {
+            IFileEditorInput fei = (IFileEditorInput) editor.getEditorInput();
+            project = fei.getFile().getProject();
+            targetFile = fei.getFile().getLocation().toFile();
+        }
+
+        if (targetFile == null) {
+            ISelection sel = HandlerUtil.getCurrentSelection(event);
+            if (sel instanceof IStructuredSelection) {
+                Object first = ((IStructuredSelection) sel).getFirstElement();
+                if (first instanceof IResource && ((IResource) first).getType() == IResource.FILE) {
+                    IResource res = (IResource) first;
+                    project = res.getProject();
+                    if (res.getLocation() != null) {
+                        targetFile = res.getLocation().toFile();
+                    }
+                }
+            }
+        }
+
+        if (project == null || targetFile == null || !targetFile.exists() || !targetFile.isFile()) {
             Shell shell = HandlerUtil.getActiveShell(event);
             MessageDialog.openWarning(shell, "Nori AI",
-                    "\uc5d0\ub514\ud130\uc5d0\uc11c \ud30c\uc77c\uc744 \uc5f4\uc5b4\uc8fc\uc138\uc694.");
+                    "에디터에서 파일을 열거나 프로젝트 탐색기에서 파일을 선택해주세요.");
             return;
         }
 
-        IFileEditorInput fei = (IFileEditorInput) editor.getEditorInput();
-        final IProject project = fei.getFile().getProject();
         final File projectDir = project.getLocation().toFile();
-        final File targetFile = fei.getFile().getLocation().toFile();
-
-        if (!targetFile.exists() || !targetFile.isFile()) {
-            Shell shell = HandlerUtil.getActiveShell(event);
-            MessageDialog.openWarning(shell, "Nori AI",
-                    "\ud30c\uc77c\uc744 \ucc3e\uc744 \uc218 \uc5c6\uc2b5\ub2c8\ub2e4.");
-            return;
-        }
+        final File finalTargetFile = targetFile;
 
         // SideView에 위임
         Display.getDefault().asyncExec(new Runnable() {
             public void run() {
                 NoriSideView view = findOrOpenView();
                 if (view != null) {
-                    view.updateFileProfile(projectDir, targetFile);
+                    view.updateFileProfile(projectDir, finalTargetFile);
+                }
+            }
+        });
+    }
+
+    private void executeProjectAnalysisUpdate(ExecutionEvent event) {
+        final IProject project = getActiveProject(event);
+        if (project == null || project.getLocation() == null) {
+            Shell shell = HandlerUtil.getActiveShell(event);
+            MessageDialog.openWarning(shell, "Nori AI",
+                    "프로젝트를 찾을 수 없습니다. 프로젝트 탐색기에서 프로젝트를 선택해주세요.");
+            return;
+        }
+
+        final File projectDir = project.getLocation().toFile();
+        Display.getDefault().asyncExec(new Runnable() {
+            public void run() {
+                NoriSideView view = findOrOpenView();
+                if (view != null) {
+                    view.triggerProjectAnalysisUpdate(projectDir);
                 }
             }
         });
@@ -467,6 +506,15 @@ public class NoriCommandHandler extends AbstractHandler {
             if (editor != null && editor.getEditorInput() instanceof IFileEditorInput) {
                 IResource res = ((IFileEditorInput) editor.getEditorInput()).getFile();
                 return res.getProject();
+            }
+        } catch (Exception e) { /* ignore */ }
+
+        try {
+            ISelection sel = HandlerUtil.getCurrentSelection(event);
+            if (sel instanceof IStructuredSelection) {
+                Object first = ((IStructuredSelection) sel).getFirstElement();
+                if (first instanceof IProject) return (IProject) first;
+                if (first instanceof IResource) return ((IResource) first).getProject();
             }
         } catch (Exception e) { /* ignore */ }
 

@@ -236,6 +236,13 @@ public class NoriSideView extends ViewPart {
                     return null;
                 }
             };
+            browser.addMenuDetectListener(new org.eclipse.swt.events.MenuDetectListener() {
+                public void menuDetected(org.eclipse.swt.events.MenuDetectEvent event) {
+                    event.doit = false;
+                    org.eclipse.swt.graphics.Point p = browser.toControl(event.x, event.y);
+                    showBrowserContextMenu(p.x, p.y);
+                }
+            });
             // ── PL 워크플로우: nori:// URL 핸들러 ──
             browser.addLocationListener(new org.eclipse.swt.browser.LocationListener() {
                 public void changing(org.eclipse.swt.browser.LocationEvent event) {
@@ -260,8 +267,16 @@ public class NoriSideView extends ViewPart {
 
         /* ── 입력 바 ── */
         Composite inputBar = new Composite(main, SWT.NONE);
-        inputBar.setLayout(new GridLayout(5, false));
+        inputBar.setLayout(new GridLayout(6, false));
         inputBar.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
+
+        Button newChatBtn = new Button(inputBar, SWT.PUSH);
+        newChatBtn.setText("새 채팅");
+        newChatBtn.setToolTipText("현재 대화를 비우고 새 채팅을 시작합니다.");
+
+        Button refreshAnalysisBtn = new Button(inputBar, SWT.PUSH);
+        refreshAnalysisBtn.setText("분석 갱신");
+        refreshAnalysisBtn.setToolTipText("현재 프로젝트 AI 분석을 다시 수행합니다.");
 
         historyCheck = new Button(inputBar, SWT.PUSH);
         historyCheck.setText("대화 선택");
@@ -298,6 +313,16 @@ public class NoriSideView extends ViewPart {
         statusLabel.setText("연결 확인 중...");
 
         /* ── 이벤트 ── */
+        newChatBtn.addListener(SWT.Selection, new org.eclipse.swt.widgets.Listener() {
+            public void handleEvent(org.eclipse.swt.widgets.Event e) {
+                startNewChat();
+            }
+        });
+        refreshAnalysisBtn.addListener(SWT.Selection, new org.eclipse.swt.widgets.Listener() {
+            public void handleEvent(org.eclipse.swt.widgets.Event e) {
+                startAIProjectAnalysis(true);
+            }
+        });
         sendBtn.addListener(SWT.Selection, new org.eclipse.swt.widgets.Listener() {
             public void handleEvent(org.eclipse.swt.widgets.Event e) {
                 sendChatMessage();
@@ -330,6 +355,7 @@ public class NoriSideView extends ViewPart {
             }
         });
 
+        configureViewActions();
         refreshDisplay();
         checkConnection();
     }
@@ -892,7 +918,7 @@ public class NoriSideView extends ViewPart {
                 js.append("var left=document.createElement('div');left.style.cssText='flex:1;overflow:hidden;';left.appendChild(t1);left.appendChild(t2);");
                 js.append("var del=document.createElement('span');del.style.cssText='color:#888;font-size:16px;cursor:pointer;padding:4px 8px;flex-shrink:0;';del.textContent='\uD83D\uDDD1\uFE0F';");
                 js.append("del.title='이 대화 삭제';");
-                js.append("del.onclick=(function(sid){return function(e){e.stopPropagation();if(confirm('이 대화를 삭제하시겠습니까?'))deleteChatSession(sid);};}('").append(sid).append("'));");
+                js.append("del.onclick=(function(sid){return function(e){e.stopPropagation();deleteChatSession(sid);};}('").append(sid).append("'));");
                 js.append("row.appendChild(left);row.appendChild(del);it.appendChild(row);");
                 js.append("it.onclick=(function(sid){return function(){ov.parentNode.removeChild(ov);loadChatSession(sid);};}('").append(sid).append("'));");
                 js.append("box.appendChild(it);}");
@@ -902,6 +928,46 @@ public class NoriSideView extends ViewPart {
         js.append("ov.onclick=function(e){if(e.target===ov)ov.parentNode.removeChild(ov);};");
         js.append("})();");
         browser.execute(js.toString());
+    }
+
+    private void showBrowserContextMenu(int x, int y) {
+        if (browser == null || browser.isDisposed()) return;
+        String currentSid = escapeJsStr(currentSessionId != null ? currentSessionId : "");
+        StringBuilder js = new StringBuilder();
+        js.append("(function(){");
+        js.append("var old=document.getElementById('nori-browser-context-menu');if(old)old.parentNode.removeChild(old);");
+        js.append("var oldBg=document.getElementById('nori-browser-context-bg');if(oldBg)oldBg.parentNode.removeChild(oldBg);");
+        js.append("var bg=document.createElement('div');bg.id='nori-browser-context-bg';bg.style.cssText='position:fixed;inset:0;z-index:9998;background:transparent;';");
+        js.append("var menu=document.createElement('div');menu.id='nori-browser-context-menu';menu.style.cssText='position:fixed;left:").append(x).append("px;top:").append(y).append("px;z-index:9999;background:#1f1f22;border:1px solid #4d4d4d;border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,0.35);min-width:180px;padding:6px;';");
+        js.append("function addItem(label, onclick, disabled){var item=document.createElement('div');item.textContent=label;item.style.cssText='padding:9px 12px;border-radius:6px;color:'+(disabled?'#666':'#e8e8e8')+';cursor:'+(disabled?'default':'pointer')+';font-size:12px;';if(!disabled){item.onmouseover=function(){item.style.background='#2d2d30';};item.onmouseout=function(){item.style.background='transparent';};item.onclick=function(e){e.stopPropagation();onclick();if(bg.parentNode)bg.parentNode.removeChild(bg);if(menu.parentNode)menu.parentNode.removeChild(menu);};}menu.appendChild(item);} ");
+        js.append("addItem('🔄 프로젝트 재분석', function(){ refreshProjectAnalysis(); }, false);");
+        js.append("addItem('➕ 새 채팅', function(){ startNewChatFromJs(); }, false);");
+        if (currentSid.length() > 0) {
+            js.append("addItem('🗑 현재 대화 삭제', function(){ deleteChatSession('").append(currentSid).append("'); }, false);");
+        } else {
+            js.append("addItem('🗑 현재 대화 삭제', function(){}, true);");
+        }
+        js.append("bg.onclick=function(){if(bg.parentNode)bg.parentNode.removeChild(bg);if(menu.parentNode)menu.parentNode.removeChild(menu);};");
+        js.append("document.body.appendChild(bg);document.body.appendChild(menu);");
+        js.append("})();");
+        browser.execute(js.toString());
+    }
+
+    private void configureViewActions() {
+        org.eclipse.jface.action.Action refreshAction = new org.eclipse.jface.action.Action("프로젝트 분석") {
+            public void run() {
+                startAIProjectAnalysis(true);
+            }
+        };
+        refreshAction.setToolTipText("현재 프로젝트 AI 분석 갱신");
+        refreshAction.setImageDescriptor(
+                PlatformUI.getWorkbench().getSharedImages()
+                        .getImageDescriptor(org.eclipse.ui.ISharedImages.IMG_ELCL_SYNCED));
+
+        org.eclipse.ui.IActionBars bars = getViewSite().getActionBars();
+        bars.getToolBarManager().add(refreshAction);
+        bars.getMenuManager().add(refreshAction);
+        bars.updateActionBars();
     }
 
     /** JS 문자열 이스케이프 (작은따옴표 내부용) */
@@ -1866,9 +1932,17 @@ public class NoriSideView extends ViewPart {
         }
     }
 
+    /** 핸들러/메뉴에서 호출하는 프로젝트 AI 분석 갱신 진입점 */
+    public void triggerProjectAnalysisUpdate(final File projectDir) {
+        startAIProjectAnalysis(projectDir, true);
+    }
+
     /** AI 기반 프로젝트 분석 시작 (배너 버튼에서 호출) */
     private void startAIProjectAnalysis(final boolean refreshMode) {
-        final File projectDir = getActiveProjectDir();
+        startAIProjectAnalysis(getActiveProjectDir(), refreshMode);
+    }
+
+    private void startAIProjectAnalysis(final File projectDir, final boolean refreshMode) {
         if (projectDir == null || !projectDir.isDirectory()) {
             messages.add(new String[]{"system",
                 "\u26A0 프로젝트를 찾을 수 없습니다. 에디터에서 파일을 하나 열어주세요.", null});

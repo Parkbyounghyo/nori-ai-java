@@ -30,6 +30,7 @@
       <command id="nori.ai.command.errorLog" name="에러 기록" categoryId="nori.ai.commands.category"/>
       <command id="nori.ai.command.convention" name="코딩 컨벤션" categoryId="nori.ai.commands.category"/>
       <command id="nori.ai.command.profileUpdate" name="현재 파일 AI 분석" categoryId="nori.ai.commands.category"/>
+      <command id="nori.ai.command.projectAnalysisUpdate" name="프로젝트 분석 업데이트" categoryId="nori.ai.commands.category"/>
    </extension>
 
    <!-- ========== Handlers ========== -->
@@ -47,10 +48,17 @@
       <handler commandId="nori.ai.command.errorLog" class="nori.ai.plugin.handlers.NoriCommandHandler"/>
       <handler commandId="nori.ai.command.convention" class="nori.ai.plugin.handlers.NoriCommandHandler"/>
       <handler commandId="nori.ai.command.profileUpdate" class="nori.ai.plugin.handlers.NoriCommandHandler"/>
+      <handler commandId="nori.ai.command.projectAnalysisUpdate" class="nori.ai.plugin.handlers.NoriCommandHandler"/>
    </extension>
 
    <!-- ========== Editor Context Menu ========== -->
    <extension point="org.eclipse.ui.menus">
+      <menuContribution locationURI="popup:org.eclipse.ui.popup.any?after=additions">
+         <menu id="nori.ai.menu.any" label="Nori AI">
+            <command commandId="nori.ai.command.projectAnalysisUpdate" label="🔄 프로젝트 분석 업데이트" style="push"/>
+            <command commandId="nori.ai.command.profileUpdate" label="📝 파일 분석 업데이트" style="push"/>
+         </menu>
+      </menuContribution>
       <!-- Java 에디터 우클릭 -->
       <menuContribution locationURI="popup:#CompilationUnitEditorContext?after=additions">
          <menu id="nori.ai.menu.java" label="Nori AI">
@@ -71,6 +79,7 @@
             <command commandId="nori.ai.command.errorLog" label="📝 에러 기록" style="push"/>
             <command commandId="nori.ai.command.convention" label="📐 코딩 컨벤션" style="push"/>
             <separator name="nori.ai.sep6j" visible="true"/>
+            <command commandId="nori.ai.command.projectAnalysisUpdate" label="🔄 프로젝트 분석 업데이트" style="push"/>
             <command commandId="nori.ai.command.profileUpdate" label="🔄 현재 파일 AI 분석" style="push"/>
          </menu>
       </menuContribution>
@@ -94,6 +103,7 @@
             <command commandId="nori.ai.command.errorLog" label="📝 에러 기록" style="push"/>
             <command commandId="nori.ai.command.convention" label="📐 코딩 컨벤션" style="push"/>
             <separator name="nori.ai.sep6" visible="true"/>
+            <command commandId="nori.ai.command.projectAnalysisUpdate" label="🔄 프로젝트 분석 업데이트" style="push"/>
             <command commandId="nori.ai.command.profileUpdate" label="🔄 현재 파일 AI 분석" style="push"/>
          </menu>
       </menuContribution>
@@ -144,6 +154,7 @@
             <command commandId="nori.ai.command.errorLog" label="📝 에러 기록" style="push"/>
             <command commandId="nori.ai.command.convention" label="📐 코딩 컨벤션" style="push"/>
             <separator name="nori.ai.sep6w" visible="true"/>
+            <command commandId="nori.ai.command.projectAnalysisUpdate" label="🔄 프로젝트 분석 업데이트" style="push"/>
             <command commandId="nori.ai.command.profileUpdate" label="🔄 현재 파일 AI 분석" style="push"/>
          </menu>
       </menuContribution>
@@ -168,6 +179,7 @@
             <command commandId="nori.ai.command.errorLog" label="📝 에러 기록" style="push"/>
             <command commandId="nori.ai.command.convention" label="📐 코딩 컨벤션" style="push"/>
             <separator name="nori.ai.main.sep6" visible="true"/>
+            <command commandId="nori.ai.command.projectAnalysisUpdate" label="🔄 프로젝트 분석 업데이트" style="push"/>
             <command commandId="nori.ai.command.profileUpdate" label="🔄 현재 파일 AI 분석" style="push"/>
          </menu>
       </menuContribution>
