@@ -1,0 +1,322 @@
+"""
+수집된 JSON 데이터를 임베딩용 Document로 파싱하는 모듈.
+
+지원 포맷:
+  - javadoc: class_name, package_name, constructors, methods, fields
+  - spring-doc: title, sections, full_text
+  - web-ui / desktop-ui: title, sections, full_text, category
+  - community-qa: question_text, answers (StackOverflow)
+  - community-issue: question_text, comments (GitHub Issues)
+  - database: content (plain text)
+"""
+from __future__ import annotations
+
+import json
+import logging
+from dataclasses import dataclass, field
+from pathlib import Path
+
+logger = logging.getLogger("nori-embedding")
+
+
+@dataclass
+class Document:
+    """임베딩 파이프라인 통합 문서 단위"""
+    id: str
+    text: str
+    metadata: dict = field(default_factory=dict)
+
+
+# ────────────────────────────────────────────────────────────
+# JavaDoc 파서 (java.lang.String.json 등)
+# ────────────────────────────────────────────────────────────
+def _parse_javadoc(data: dict, file_path: str) -> list[Document]:
+    pkg = data.get("package_name", "")
+    cls = data.get("class_name", "")
+    fqcn = f"{pkg}.{cls}" if pkg and cls else cls
+    base_id = fqcn or Path(file_path).stem
+
+    docs: list[Document] = []
+    meta_base = {
+        "source_type": "javadoc",
+        "package_name": pkg,
+        "class_name": cls,
+        "url": data.get("url", ""),
+    }
+
+    # 1) 클래스 개요 청크
+    sig = data.get("signature", "")
+    desc = data.get("description", "")
+    overview = f"[Java API] {fqcn}\n\n{sig}\n\n{desc}".strip()
+    if overview:
+        docs.append(Document(
+            id=f"javadoc:{base_id}:overview",
+            text=overview,
+            metadata={**meta_base, "chunk_type": "overview"},
+        ))
+
+    # 2) 생성자들
+    for i, ctor in enumerate(data.get("constructors", [])):
+        text = f"[Constructor] {fqcn}\n{ctor.get('signature', '')}\n\n{ctor.get('description', '')}".strip()
+        docs.append(Document(
+            id=f"javadoc:{base_id}:ctor:{i}",
+            text=text,
+            metadata={**meta_base, "chunk_type": "constructor"},
+        ))
+
+    # 3) 메서드들 — 각 메서드를 개별 청크로
+    for i, method in enumerate(data.get("methods", [])):
+        text = f"[Method] {fqcn}\n{method.get('signature', '')}\n\n{method.get('description', '')}".strip()
+        docs.append(Document(
+            id=f"javadoc:{base_id}:method:{i}",
+            text=text,
+            metadata={**meta_base, "chunk_type": "method"},
+        ))
+
+    # 4) 필드들
+    for i, fld in enumerate(data.get("fields", [])):
+        text = f"[Field] {fqcn}\n{fld.get('signature', '')}\n\n{fld.get('description', '')}".strip()
+        docs.append(Document(
+            id=f"javadoc:{base_id}:field:{i}",
+            text=text,
+            metadata={**meta_base, "chunk_type": "field"},
+        ))
+
+    return docs
+
+
+# ────────────────────────────────────────────────────────────
+# Spring / 웹UI / 데스크탑UI 파서 (섹션 기반)
+# ────────────────────────────────────────────────────────────
+def _parse_section_doc(data: dict, file_path: str) -> list[Document]:
+    source_type = data.get("source_type", "spring-doc")
+    source_name = data.get("source_name", "")
+    title = data.get("title", Path(file_path).stem)
+    url = data.get("url", "")
+    category = data.get("category", "")
+
+    stem = Path(file_path).stem
+    base_id = f"{source_type}:{stem}"
+
+    meta_base = {
+        "source_type": source_type,
+        "source_name": source_name,
+        "title": title,
+        "url": url,
+    }
+    if category:
+        meta_base["category"] = category
+
+    docs: list[Document] = []
+    sections = data.get("sections", [])
+
+    if sections:
+        for i, sec in enumerate(sections):
+            heading = sec.get("heading", "")
+            content = sec.get("content", "")
+            if not content or len(content.strip()) < 20:
+                continue
+            text = f"[{source_type}] {title} — {heading}\n\n{content}".strip()
+            docs.append(Document(
+                id=f"{base_id}:sec:{i}",
+                text=text,
+                metadata={**meta_base, "chunk_type": "section", "heading": heading},
+            ))
+    else:
+        # 섹션 없으면 full_text → content 순서로 fallback
+        full_text = data.get("full_text", "") or data.get("content", "")
+        if full_text and len(full_text.strip()) >= 20:
+            docs.append(Document(
+                id=f"{base_id}:full",
+                text=f"[{source_type}] {title}\n\n{full_text}".strip(),
+                metadata={**meta_base, "chunk_type": "full"},
+            ))
+
+    return docs
+
+
+# ────────────────────────────────────────────────────────────
+# Q&A 파서 (StackOverflow 등)
+# ────────────────────────────────────────────────────────────
+def _parse_qa_doc(data: dict, file_path: str) -> list[Document]:
+    """question_text + answers 구조의 Q&A 문서를 파싱한다."""
+    source_type = data.get("source_type", "community-qa")
+    source_name = data.get("source_name", "")
+    title = data.get("title", Path(file_path).stem)
+    url = data.get("url", "")
+    category = data.get("category", "")
+
+    stem = Path(file_path).stem
+    base_id = f"{source_type}:{stem}"
+
+    meta_base = {
+        "source_type": source_type,
+        "source_name": source_name,
+        "title": title,
+        "url": url,
+    }
+    if category:
+        meta_base["category"] = category
+
+    docs: list[Document] = []
+
+    # 질문 텍스트
+    question = data.get("question_text", "")
+    if question and len(question.strip()) >= 20:
+        text = f"[Q&A] {title}\n\n질문:\n{question}".strip()
+        docs.append(Document(
+            id=f"{base_id}:question",
+            text=text,
+            metadata={**meta_base, "chunk_type": "question"},
+        ))
+
+    # 답변들 — 점수 높은 순으로
+    answers = data.get("answers", [])
+    answers_sorted = sorted(answers, key=lambda a: a.get("score", 0), reverse=True)
+    for i, ans in enumerate(answers_sorted):
+        ans_text = ans.get("text", "")
+        if not ans_text or len(ans_text.strip()) < 20:
+            continue
+        score = ans.get("score", 0)
+        accepted = " ✓" if ans.get("is_accepted") else ""
+        text = f"[Q&A] {title} — 답변 (점수:{score}{accepted})\n\n{ans_text}".strip()
+        docs.append(Document(
+            id=f"{base_id}:answer:{i}",
+            text=text,
+            metadata={**meta_base, "chunk_type": "answer", "score": score},
+        ))
+
+    return docs
+
+
+# ────────────────────────────────────────────────────────────
+# Issue 파서 (GitHub Issues 등)
+# ────────────────────────────────────────────────────────────
+def _parse_issue_doc(data: dict, file_path: str) -> list[Document]:
+    """question_text + comments 구조의 이슈 문서를 파싱한다."""
+    source_type = data.get("source_type", "community-issue")
+    source_name = data.get("source_name", "")
+    title = data.get("title", Path(file_path).stem)
+    url = data.get("url", "")
+    category = data.get("category", "")
+
+    stem = Path(file_path).stem
+    base_id = f"{source_type}:{stem}"
+
+    meta_base = {
+        "source_type": source_type,
+        "source_name": source_name,
+        "title": title,
+        "url": url,
+    }
+    if category:
+        meta_base["category"] = category
+
+    docs: list[Document] = []
+
+    # 이슈 본문
+    body = data.get("question_text", "") or data.get("body", "")
+    labels = data.get("labels", [])
+    label_str = f" [{', '.join(labels)}]" if labels else ""
+
+    if body and len(body.strip()) >= 20:
+        text = f"[Issue{label_str}] {title}\n\n{body}".strip()
+        docs.append(Document(
+            id=f"{base_id}:body",
+            text=text,
+            metadata={**meta_base, "chunk_type": "issue_body"},
+        ))
+
+    # 댓글들
+    comments = data.get("comments", [])
+    for i, cmt in enumerate(comments):
+        cmt_text = cmt.get("text", "")
+        if not cmt_text or len(cmt_text.strip()) < 20:
+            continue
+        user = cmt.get("user", "")
+        text = f"[Issue] {title} — 댓글 ({user})\n\n{cmt_text}".strip()
+        docs.append(Document(
+            id=f"{base_id}:comment:{i}",
+            text=text,
+            metadata={**meta_base, "chunk_type": "comment"},
+        ))
+
+    return docs
+
+
+# ────────────────────────────────────────────────────────────
+# 통합 파서 — 소스 타입별 디스패치
+# ────────────────────────────────────────────────────────────
+_PARSER_MAP = {
+    "javadoc": _parse_javadoc,
+    "spring-doc": _parse_section_doc,
+    "web-ui": _parse_section_doc,
+    "desktop-ui": _parse_section_doc,
+    "egov": _parse_section_doc,
+    "community": _parse_section_doc,
+    "community-qa": _parse_qa_doc,
+    "community-tutorial": _parse_section_doc,
+    "community-issue": _parse_issue_doc,
+    "database": _parse_section_doc,
+    "database-doc": _parse_section_doc,
+    "oracle-doc": _parse_section_doc,
+    "mariadb-doc": _parse_section_doc,
+    "mongodb-doc": _parse_section_doc,
+    "postgresql-doc": _parse_section_doc,
+    "redis-doc": _parse_section_doc,
+    "sqlite-doc": _parse_section_doc,
+}
+
+
+def parse_json_file(file_path: str | Path) -> list[Document]:
+    """단일 JSON 파일을 파싱하여 Document 리스트를 반환한다."""
+    fp = Path(file_path)
+    if not fp.exists() or fp.name.startswith("_"):
+        return []
+
+    try:
+        data = json.loads(fp.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, UnicodeDecodeError) as e:
+        logger.warning(f"JSON 파싱 오류 [{fp}]: {e}")
+        return []
+
+    source_type = data.get("source_type", "")
+    parser = _PARSER_MAP.get(source_type, _parse_section_doc)
+    return parser(data, str(fp))
+
+
+def parse_directory(data_dir: str | Path, source_types: list[str] | None = None) -> list[Document]:
+    """
+    데이터 디렉토리 전체를 재귀 스캔하여 Document 리스트를 반환한다.
+    source_types 지정 시 해당 소스타입만 파싱한다.
+    """
+    data_path = Path(data_dir)
+    if not data_path.is_dir():
+        logger.error(f"데이터 디렉토리 없음: {data_path}")
+        return []
+
+    all_docs: list[Document] = []
+    json_files = sorted(data_path.rglob("*.json"))
+    total = len(json_files)
+    parsed = 0
+
+    for i, fp in enumerate(json_files):
+        if fp.name.startswith("_"):
+            continue
+
+        docs = parse_json_file(fp)
+
+        # source_type 필터링 (접두사 매칭: "community" → "community-qa" 등 포함)
+        if source_types and docs:
+            st = docs[0].metadata.get("source_type", "")
+            if not any(st == t or st.startswith(t + "-") for t in source_types):
+                continue
+
+        all_docs.extend(docs)
+        parsed += 1
+
+        if (i + 1) % 200 == 0:
+            logger.info(f"파싱 진행 {i+1}/{total} 파일 — 문서 {len(all_docs)}개 생성")
+
+    logger.info(f"파싱 완료: {parsed}개 파일 → {len(all_docs)}개 문서")
+    return all_docs
