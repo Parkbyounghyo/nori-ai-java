@@ -13,7 +13,7 @@ from fastapi.responses import FileResponse
 
 from app.config.settings import get_settings
 from app.api.deps import init_services
-from app.api import system, code_writing, code_analysis, error_debug, search_chat, egov, project_context, memo, collector_admin, pl_workflow, profile_api, chat_session
+from app.api import system, code_writing, code_analysis, error_debug, search_chat, egov, project_context, memo, collector_admin, profile_api, chat_session
 
 # ── 로깅 설정 ──
 logging.basicConfig(
@@ -73,7 +73,6 @@ app.include_router(egov.router)
 app.include_router(project_context.router)
 app.include_router(memo.router)
 app.include_router(collector_admin.router)
-app.include_router(pl_workflow.router)
 app.include_router(profile_api.router)
 app.include_router(chat_session.router)
 
