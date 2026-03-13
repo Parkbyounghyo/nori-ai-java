@@ -1,15 +1,19 @@
 """
 효율적 에이전트 프로세스 — LLM 호출 최소화
 
-1. 의도 분석 & 키워드 추출: 규칙 기반 (LLM 없음)
-2. 파일 검색: 벡터 DB / 검색엔진 (LLM 없음)
-3. 컨텍스트 조립: 검색 결과 요약 (LLM 없음)
-4. 최종 추론: LLM 1회만 사용
+파이프라인:
+  질문 → Intent Analyzer → Search Planner → Query Expansion
+       → Vector Search (multi-collection) → Rerank → Context Builder → LLM 1회
 """
 import logging
 from typing import AsyncGenerator
 
 from app.service.keyword_extractor import extract_keywords, keywords_to_query
+from app.intent.intent_analyzer import analyze_intent
+from app.search.search_planner import plan_search
+from app.search.query_expander import expand_query
+from app.search.retrieval_cache import get_cached_results, cache_results
+from app.context.context_builder import build_context
 
 logger = logging.getLogger("nori-server")
 
@@ -24,75 +28,92 @@ async def search_code_with_keywords(
     project_id: str | None = None,
     top_k: int = 12,
 ) -> list[dict]:
-    """키워드 기반 벡터 검색 (LLM 미사용)
+    """Intent → Search Planner → Query Expansion → 벡터 검색 파이프라인 (LLM 미사용).
 
-    프로젝트 있으면 profiles 컬렉션 우선, 없으면 전체 검색.
+    1. 의도 분류 → 컬렉션·top_k 결정
+    2. 쿼리 확장 → 최대 3개 쿼리
+    3. 확장 쿼리별 지정 컬렉션 검색
+    4. 점수 정렬 → 상위 top_k 반환
     """
-    keywords = extract_keywords(question)
-    query = keywords_to_query(keywords) or question
-    if not query.strip():
+    # ── 1. Intent 분류 & 검색 계획 ──
+    intent = analyze_intent(question)
+    plan = plan_search(intent, top_k_override=top_k, project_id=project_id)
+    logger.info("[파이프라인] intent=%s, collections=%s, top_k=%d",
+                intent, plan.collections, plan.top_k)
+
+    # ── 2. 쿼리 확장 ──
+    base_query = keywords_to_query(extract_keywords(question)) or question
+    expanded_queries = expand_query(base_query, max_expansions=plan.query_expansion_count)
+    logger.info("[파이프라인] 확장 쿼리 %d개: %s", len(expanded_queries), expanded_queries[:2])
+
+    # ── 2-a. Retrieval Cache 조회 ──
+    cached = get_cached_results(base_query, plan.collections, plan.top_k, project_id)
+    if cached is not None:
+        logger.info("[파이프라인] 캐시 HIT — %d건 반환", len(cached))
+        return cached
+
+    all_results: list[dict] = []
+    seen_ids: set[str] = set()
+
+    if not emb.is_available:
         return []
 
-    all_results = []
+    # ── 3. 확장 쿼리별 지정 컬렉션 검색 ──
+    for q in expanded_queries:
+        try:
+            project_filter = {"project": project_id} if project_id else None
+            results = await emb.search(
+                query=q,
+                top_k=plan.top_k,
+                collections=plan.collections,
+                filters=project_filter,
+            )
+            for r in results:
+                rid = r.get("id") or r.get("text", "")[:60]
+                if rid not in seen_ids:
+                    all_results.append(r)
+                    seen_ids.add(rid)
+        except Exception as e:
+            logger.warning("[파이프라인] 검색 오류 (query=%r): %s", q[:40], e)
 
-    # 프로젝트 프로필 검색
+    # ── 4. 프로파일 검색 (보조) ──
     if project_id and user_id and hasattr(emb, "search_profiles"):
         try:
             profile_results = await emb.search_profiles(
-                query=query, user_id=user_id, project_id=project_id, top_k=top_k
+                query=base_query, user_id=user_id, project_id=project_id, top_k=6
             )
-            all_results.extend(profile_results)
-            logger.info("[효율에이전트] profiles 검색 %d건", len(profile_results))
-        except Exception as e:
-            logger.warning("[효율에이전트] profiles 검색 실패: %s", e)
-
-    # 공통 컬렉션 검색 (javadoc, spring, egov, errors 등)
-    if emb.is_available:
-        try:
-            common_results = await emb.search(query=query, top_k=top_k)
-            for r in common_results:
-                if r not in all_results:
+            for r in profile_results:
+                rid = r.get("id") or r.get("text", "")[:60]
+                if rid not in seen_ids:
                     all_results.append(r)
-            logger.info("[효율에이전트] 공통 컬렉션 검색 %d건", len(common_results))
+                    seen_ids.add(rid)
+            logger.info("[파이프라인] profiles 검색 %d건", len(profile_results))
         except Exception as e:
-            logger.warning("[효율에이전트] 공통 검색 실패: %s", e)
+            logger.warning("[파이프라인] profiles 검색 실패: %s", e)
 
-    # 점수 기준 정렬 후 상위만 반환
+    # ── 5. 점수 정렬 → 상위 top_k ──
     all_results.sort(key=lambda x: x.get("score", 0), reverse=True)
-    return all_results[:top_k]
+    final = all_results[:plan.top_k]
+    logger.info("[파이프라인] 최종 검색 결과 %d건 (intent=%s)", len(final), intent)
+
+    # ── 6. 캐시 저장 ──
+    if final:
+        cache_results(base_query, final, plan.collections, plan.top_k, project_id)
+
+    return final
 
 
-def assemble_context(results: list[dict], max_chars: int = MAX_CONTEXT_CHARS) -> str:
-    """검색 결과를 하나의 컨텍스트로 조립 (함수명·문법 정보 위주)
+def assemble_context(
+    results: list[dict],
+    intent: str = "code_search",
+    max_chars: int = MAX_CONTEXT_CHARS,
+) -> str:
+    """검색 결과를 Intent에 맞춰 정렬 후 LLM 컨텍스트 문자열로 조립.
 
-    벡터 검색 결과의 text는 이미 프로필/소스구조 요약이므로 그대로 사용.
+    Intent 분류 결과를 반영하여 flow_trace 시 레이어 순서,
+    error_analysis 시 errors/community 우선 정렬.
     """
-    if not results:
-        return ""
-
-    parts = []
-    total = 0
-    seen = set()
-    for r in results:
-        text = r.get("text", "").strip()
-        if not text or text in seen:
-            continue
-        seen.add(text)
-        meta = r.get("metadata", {})
-        file_path = meta.get("file_path", meta.get("path", ""))
-        prefix = f"[{file_path}]\n" if file_path else ""
-        block = f"{prefix}{text}\n\n"
-        if total + len(block) > max_chars:
-            remain = max_chars - total - 100
-            if remain > 100:
-                block = block[:remain] + "\n...(생략)\n\n"
-            parts.append(block)
-            total += len(block)
-            break
-        parts.append(block)
-        total += len(block)
-
-    return "".join(parts).strip()
+    return build_context(results, intent=intent, max_chars=max_chars)
 
 
 async def efficient_agent_complete(
@@ -101,10 +122,12 @@ async def efficient_agent_complete(
     assembled_context: str,
     history: list[dict] | None = None,
 ) -> str:
-    """최종 추론 — LLM 1회만 호출
+    """최종 추론 — LLM 1회만 호출 + Safety Guard 적용
 
-    '여기 네가 고쳐야 할 소스 코드 조각들이야. 이걸 보고 에러를 해결해줘.'
+    LLM 응답에서 코드 블록을 추출하여 Safety Guard 검사 후
+    위반이 있으면 경고 메시지를 응답에 덧붙인다.
     """
+    from app.service.safety_guard import check_code_safety
     system = (
         "당신은 같은 팀 시니어 Java 개발자입니다.\n"
         "사용자가 제공한 참고 코드 조각들을 보고 요청대로 수정/해결 방법을 제시합니다.\n\n"
@@ -129,7 +152,21 @@ async def efficient_agent_complete(
     messages.append({"role": "user", "content": user_content})
 
     result = await llm.complete_messages(messages)
-    return result or ""
+    answer = result or ""
+
+    # Safety Guard — 응답 코드 블록 검사
+    code_blocks = _extract_code_blocks(answer)
+    for block in code_blocks:
+        guard = check_code_safety(block)
+        if not guard.safe:
+            logger.warning("[SafetyGuard] LLM 응답 코드에서 위험 패턴 감지: %s", guard.summary())
+            answer += (
+                f"\n\n> ⚠️ **Safety Guard 경고**: 위 코드에서 주의가 필요한 패턴이 감지되었습니다.\n"
+                + "\n".join(f"> - {v['message']}" for v in guard.violations)
+            )
+            break
+
+    return answer
 
 
 async def efficient_agent_stream(
@@ -164,3 +201,11 @@ async def efficient_agent_stream(
 
     async for token in llm.stream_messages(messages):
         yield token
+
+
+# ── 내부 헬퍼 ──
+
+def _extract_code_blocks(text: str) -> list[str]:
+    """마크다운 코드 블록(``` ... ```) 추출."""
+    import re
+    return re.findall(r"```(?:\w+)?\n(.*?)```", text, re.S)

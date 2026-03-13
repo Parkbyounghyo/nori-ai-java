@@ -109,13 +109,15 @@ async def chat_efficient(
         assemble_context,
         efficient_agent_complete,
     )
+    from app.intent.intent_analyzer import analyze_intent
     user_id = req.user_id or "default"
     project_id = (req.project_id or "").strip() or None
+    intent = analyze_intent(effective_message)
 
     results = await search_code_with_keywords(
         emb, effective_message, user_id=user_id, project_id=project_id, top_k=12
     )
-    ctx = assemble_context(results)
+    ctx = assemble_context(results, intent=intent)
     if not ctx:
         logger.warning("[효율에이전트] 검색 결과 없음 — LLM만 호출")
     answer = await efficient_agent_complete(
@@ -124,6 +126,7 @@ async def chat_efficient(
     return NoriResponse(data={
         "answer": answer,
         "search_results_count": len(results),
+        "intent": intent,
     })
 
 
@@ -147,19 +150,21 @@ async def chat_efficient_stream(
         assemble_context,
         efficient_agent_stream,
     )
+    from app.intent.intent_analyzer import analyze_intent
 
     user_id = req.user_id or "default"
     project_id = req.project_id or None
+    intent = analyze_intent(effective_message)
 
     results = await search_code_with_keywords(
         emb, effective_message, user_id=user_id, project_id=project_id, top_k=12
     )
-    ctx = assemble_context(results)
+    ctx = assemble_context(results, intent=intent)
     if not ctx:
         logger.warning("[효율에이전트 스트림] 검색 결과 없음")
 
     async def gen():
-        yield _sse("status", {"message": f"검색 완료: {len(results)}개 조각", "step": "search_done"})
+        yield _sse("status", {"message": f"검색 완료: {len(results)}개 조각 (intent={intent})", "step": "search_done"})
         async for token in efficient_agent_stream(llm, effective_message, ctx, history=effective_history):
             yield _sse("token", {"content": token})
         yield _sse("done", {})
@@ -193,14 +198,16 @@ async def smart_chat(req: SmartChatRequest, llm: LlmDep, emb: EmbeddingDep):
             assemble_context,
             efficient_agent_complete,
         )
+        from app.intent.intent_analyzer import analyze_intent
         user_id = req.user_id or "default"
         project_id = (req.project_id or "").strip() or None
+        intent = analyze_intent(effective_message)
         results = await search_code_with_keywords(
             emb, effective_message, user_id=user_id, project_id=project_id, top_k=12
         )
-        ctx = assemble_context(results)
+        ctx = assemble_context(results, intent=intent)
         answer = await efficient_agent_complete(llm, effective_message, ctx, history=effective_history)
-        return NoriResponse(data={"answer": answer, "search_results_count": len(results)})
+        return NoriResponse(data={"answer": answer, "search_results_count": len(results), "intent": intent})
 
     profile = await _resolve_profile(req)
 
@@ -1305,14 +1312,16 @@ async def _smart_chat_stream_inner(req: SmartChatRequest, llm: LlmDep, emb: Embe
             assemble_context,
             efficient_agent_stream,
         )
+        from app.intent.intent_analyzer import analyze_intent
         user_id = req.user_id or "default"
         project_id = (req.project_id or "").strip() or None
+        intent = analyze_intent(effective_message)
         results = await search_code_with_keywords(
             emb, effective_message, user_id=user_id, project_id=project_id, top_k=12
         )
-        ctx = assemble_context(results)
+        ctx = assemble_context(results, intent=intent)
         async def eff_gen():
-            yield _sse("status", {"message": f"검색 완료: {len(results)}개 조각 (효율 모드)", "step": "search_done"})
+            yield _sse("status", {"message": f"검색 완료: {len(results)}개 조각 (intent={intent})", "step": "search_done"})
             async for token in efficient_agent_stream(llm, effective_message, ctx, history=effective_history):
                 yield _sse("token", {"content": token})
             yield _sse("done", {})
@@ -1706,6 +1715,36 @@ async def embedding_stats(emb: EmbeddingDep):
     """임베딩 통계 — 저장 문서 수, 컬렉션별 현황"""
     stats = await emb.get_stats()
     return NoriResponse(data=stats)
+
+
+@router.get("/cache/stats", response_model=NoriResponse)
+async def cache_stats():
+    """Retrieval 캐시 통계 — hit/miss/size"""
+    from app.search.retrieval_cache import get_cache_stats
+    return NoriResponse(data=get_cache_stats())
+
+
+@router.delete("/cache/clear", response_model=NoriResponse)
+async def cache_clear():
+    """Retrieval 캐시 전체 비우기"""
+    from app.search.retrieval_cache import clear_cache
+    clear_cache()
+    return NoriResponse(data={"message": "캐시가 초기화되었습니다."})
+
+
+@router.post("/code/safety-check", response_model=NoriResponse)
+async def safety_check(body: dict):
+    """코드 안전성 검사 — Safety Guard 위반 여부 반환"""
+    from app.service.safety_guard import check_code_safety
+    code = str(body.get("code", ""))
+    if not code.strip():
+        return NoriResponse(data={"safe": True, "violations": []})
+    result = check_code_safety(code)
+    return NoriResponse(data={
+        "safe": result.safe,
+        "violations": result.violations,
+        "summary": result.summary(),
+    })
 
 
 # ── WebSocket 스트리밍 대화 ──
