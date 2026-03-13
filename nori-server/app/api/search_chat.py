@@ -1526,6 +1526,7 @@ async def _smart_chat_stream_inner(req: SmartChatRequest, llm: LlmDep, emb: Embe
                 try:
                     _t1 = time.time()
                     token_count = 0
+                    _task_tokens: list[str] = []  # 은닉 검증용 per-task 응답 수집
                     async for token in llm.stream_task(
                         intent, detail, code, rag_context, file_ctx, effective_history,
                         profile=profile, entities_cheatsheet=_entities_cheatsheet
@@ -1534,12 +1535,58 @@ async def _smart_chat_stream_inner(req: SmartChatRequest, llm: LlmDep, emb: Embe
                             logger.info("[스트림] 첫 토큰 도착 — %.1f초 대기", time.time() - _t1)
                             yield _sse("status", {"step": "react_thought", "message": "💭 사고 중..."})
                         token_count += 1
+                        _task_tokens.append(token)
                         _full_response.append(token)
                         yield _sse("token", {"content": token})
                     _log_step(_t0, f"태스크_{idx+1}", f"AI완료 {intent} {token_count}토큰 {time.time()-_t1:.1f}s")
                     logger.info("[스트림] 완료 — %d토큰, %.1f초 소요", token_count, time.time() - _t1)
                     if token_count == 0:
                         yield _sse("token", {"content": "\n\n⚠️ AI 모델이 응답을 생성하지 못했습니다. 다시 시도해주세요."})
+
+                    # ── 은닉 검증 (Hidden Auto-Validation) ──
+                    _VALIDATE_INTENTS = {"SEARCH", "ERROR_FIX", "REFACTOR", "GENERATE"}
+                    if intent in _VALIDATE_INTENTS and req.file_contents and _task_tokens:
+                        _primary_file = (t.get("files") or [None])[0]
+                        _primary_content = req.file_contents.get(_primary_file, "") if _primary_file else ""
+                        if _primary_file and _primary_content:
+                            try:
+                                from app.service.code_validator import validate_ai_output
+                                _val = validate_ai_output(
+                                    _primary_file, _primary_content, "".join(_task_tokens)
+                                )
+                                if not _val.passed:
+                                    _errs = "\n".join(f"- {e}" for e in _val.errors)
+                                    logger.warning(
+                                        "[은닉검증] %s 실패 — 오류 %d개: %s",
+                                        _primary_file, len(_val.errors), _val.errors,
+                                    )
+                                    yield _sse("status", {
+                                        "step": "hidden_validate",
+                                        "message": "🔍 코드 자동 검증 후 보완 중...",
+                                    })
+                                    _retry_q = (
+                                        f"{detail}\n\n"
+                                        f"⚠️ 자동 검수 결과 다음 구조적 오류가 발견되었습니다:\n{_errs}\n\n"
+                                        f"위 오류를 반드시 수정하여 올바른 코드를 재작성하세요. "
+                                        f"원본 파일 `{_primary_file}`의 package, 클래스명, "
+                                        f"@RequestMapping URL은 그대로 유지하세요."
+                                    )
+                                    _corrected = await llm.chat(
+                                        question=_retry_q,
+                                        history=effective_history,
+                                        rag_context=rag_context,
+                                        project_context=file_ctx,
+                                    )
+                                    if _corrected:
+                                        _sep = (
+                                            "\n\n---\n"
+                                            "> 🔧 **자동 수정됨** (코드 검증에서 구조적 오류 발견 → 재생성)\n\n"
+                                        )
+                                        for _chunk in [_sep, _corrected]:
+                                            _full_response.append(_chunk)
+                                            yield _sse("token", {"content": _chunk})
+                            except Exception as _ve:
+                                logger.warning("[은닉검증] 오류 (무시하고 계속): %s", _ve)
                 except Exception as e:
                     logger.error("stream_task 실패: %s", e, exc_info=True)
                     yield _sse("token", {"content": f"\n\n❌ {intent} 실행 실패: {e}"})

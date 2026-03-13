@@ -118,6 +118,37 @@ body { font-family: 'Segoe UI', 'Malgun Gothic', sans-serif; background: var(--b
 .md-content ul, .md-content ol { padding-left: 20px; margin: 4px 0; }
 .md-content li { margin: 2px 0; }
 .md-content strong { color: var(--yellow); }
+
+/* ── Todo 대시보드 ── */
+.todo-dashboard { background: var(--bg3); border-bottom: 1px solid var(--border); padding: 6px 12px; font-size: 12px; }
+.todo-item { padding: 2px 0; line-height: 1.6; }
+.todo-item.done { color: var(--green); }
+.todo-item.active { color: var(--accent); font-weight: 600; }
+.todo-item.waiting { color: var(--fg2); }
+
+/* ── QA 참고 목록 패널 ── */
+.qa-panel { background: var(--bg); border-bottom: 2px solid var(--accent); display: flex; flex-direction: column; max-height: 220px; }
+.qa-panel-header { display:flex; justify-content:space-between; align-items:center; padding:6px 12px; background:var(--bg3); font-size:12px; font-weight:600; color:var(--accent2); border-bottom:1px solid var(--border); flex-shrink:0; }
+.qa-list { flex:1; overflow-y:auto; padding:4px 8px; }
+.qa-item { display:flex; align-items:center; gap:8px; padding:4px 6px; border-radius:4px; }
+.qa-item:hover { background:var(--bg3); }
+.qa-item label { font-size:12px; color:var(--fg); cursor:pointer; flex:1; line-height:1.4; }
+.qa-item input[type="checkbox"] { accent-color:var(--accent); cursor:pointer; flex-shrink:0; }
+
+/* ── 에이전트 제어 버튼 ── */
+.agent-controls { background: var(--bg3); border-top: 2px solid var(--accent); padding: 10px 12px; }
+.agent-controls-label { font-size:12px; color:var(--fg2); margin-bottom:8px; }
+.agent-controls-btns { display:flex; gap:6px; flex-wrap:wrap; }
+.agent-btn { font-size:12px; padding:5px 12px; border-radius:4px; font-weight:500; }
+.agent-btn.success { border-color:#3a7a3a; color:var(--green); }
+.agent-btn.success:hover { background:#1a3a1a; }
+.agent-btn.fail { border-color:#8a5520; color:var(--orange); }
+.agent-btn.fail:hover { background:#3a2510; }
+.agent-btn.skip { border-color:var(--fg2); color:var(--fg2); }
+.agent-btn.skip:hover { background:var(--bg4); }
+.agent-error-input { margin-top:8px; display:flex; gap:6px; }
+.agent-error-input textarea { flex:1; min-height:60px; padding:6px 8px; background:var(--bg); border:1px solid var(--border); color:var(--fg); border-radius:4px; font-size:12px; resize:vertical; outline:none; }
+.qa-badge { font-size:10px; color:var(--accent2); background:var(--bg4); padding:1px 6px; border-radius:8px; margin-left:4px; }
 </style>
 </head>
 <body>
@@ -193,16 +224,45 @@ public class UserService {
   <div class="chat-panel" id="chatPanel">
     <div class="chat-header">
       <span>💬 Nori 채팅</span>
-      <button class="btn" onclick="clearChat()" style="padding:2px 8px; font-size:11px;">🗑 초기화</button>
+      <div style="display:flex;gap:6px;align-items:center;">
+        <button class="btn" onclick="toggleQaPanel()" style="padding:2px 8px;font-size:11px;" title="참고할 대화 선택">📋 참고 대화<span class="qa-badge" id="qaSelectionBadge" style="display:none;"></span></button>
+        <button class="btn" onclick="clearChat()" style="padding:2px 8px;font-size:11px;">🗑 초기화</button>
+      </div>
+    </div>
+    <!-- [Todo List] 대시보드 -->
+    <div class="todo-dashboard" id="todoDashboard" style="display:none;">
+      <div id="todoContent"></div>
+    </div>
+    <!-- QA 참고 목록 패널 -->
+    <div class="qa-panel" id="qaPanel" style="display:none;">
+      <div class="qa-panel-header">
+        📋 참고할 대화 목록 <span id="qaPairCount"></span>
+        <button class="btn" onclick="toggleQaPanel()" style="padding:2px 6px;font-size:11px;">✕</button>
+      </div>
+      <div class="qa-list" id="qaList">
+        <p style="color:var(--fg2);padding:8px;font-size:12px;">대화를 시작하면 참고할 내용을 선택할 수 있습니다.</p>
+      </div>
     </div>
     <div class="chat-messages" id="chatMessages">
       <div class="msg system">Nori AI에 오신 걸 환영해요! Java 관련 뭐든 물어보세요.</div>
     </div>
+    <!-- 에이전트 제어 버튼 -->
+    <div class="agent-controls" id="agentControls" style="display:none;">
+      <div class="agent-controls-label">🤖 코드 작성 완료 — 테스트 결과를 알려주세요</div>
+      <div class="agent-controls-btns">
+        <button class="btn agent-btn success" onclick="agentFeedback('success')">✅ 테스트 완료 (적용 성공)</button>
+        <button class="btn agent-btn fail" onclick="agentFeedback('fail')">⚠️ 에러 발생 / 수정</button>
+        <button class="btn agent-btn skip" onclick="agentFeedback('skip')">⏭ 다음 작업 진행</button>
+      </div>
+      <div class="agent-error-input" id="agentErrorInput" style="display:none;">
+        <textarea id="agentErrorText" placeholder="에러 로그나 피드백을 입력하세요..."></textarea>
+        <button class="btn primary" onclick="agentSubmitError()">전송</button>
+      </div>
+    </div>
     <div class="chat-input-area">
       <div class="chat-options">
-        <label><input type="checkbox" id="useRag" checked> 📚 RAG 검색</label>
         <label><input type="checkbox" id="sendCode"> 📎 에디터 코드 첨부</label>
-        <label><input type="checkbox" id="useProject" onchange="onUseProjectChange()"> 📁 프로젝트 프로필 사용</label>
+        <label><input type="checkbox" id="useProject" onchange="onUseProjectChange()"> 📁 프로젝트 프로필</label>
       </div>
       <div id="projectSection" class="project-section" style="display:none;">
         <div class="project-row">
@@ -217,6 +277,7 @@ public class UserService {
       <div class="chat-input-row">
         <textarea id="chatInput" rows="2" placeholder="메시지를 입력하세요... (Shift+Enter: 줄바꿈)" onkeydown="handleChatKey(event)"></textarea>
         <button class="btn primary" id="sendBtn" onclick="sendChat()">전송</button>
+        <button class="btn" id="stopBtn" onclick="stopStream()" style="display:none;border-color:var(--red);color:var(--red);">■ 중단</button>
       </div>
     </div>
   </div>
@@ -225,8 +286,10 @@ public class UserService {
 <script>
 // ── 설정 ──
 const API = 'http://localhost:8090/api/v1';
-let chatHistory = [];
 let isProcessing = false;
+let sessionId = '';           // 현재 대화 세션 ID
+let selectedIndices = null;   // null=최근5개 디폴트, []=없음, [0,1]=선택된 인덱스
+let streamAbortController = null;  // SSE 침 제어
 
 // ── 서버 연결 체크 ──
 async function checkHealth() {
@@ -383,47 +446,100 @@ function hideTyping() {
 
 async function sendChat() {
   const input = document.getElementById('chatInput');
-  let message = input.value.trim();
-  if (!message || isProcessing) return;
+  const rawMessage = input.value.trim();
+  if (!rawMessage || isProcessing) return;
 
   const sendCode = document.getElementById('sendCode').checked;
-  const useRag = document.getElementById('useRag').checked;
+  const useProject = document.getElementById('useProject').checked;
+  const projectId = useProject ? (document.getElementById('projectSelect')?.value || '') : '';
 
+  let fullMessage = rawMessage;
   if (sendCode && editor.value.trim()) {
-    message += `\n\n[에디터 코드]\n\`\`\`java\n${editor.value.trim()}\n\`\`\``;
+    fullMessage += `\n\n[에디터 코드]\n\`\`\`java\n${editor.value.trim()}\n\`\`\``;
   }
 
-  appendMessage('user', input.value.trim());
+  appendMessage('user', rawMessage);
   input.value = '';
   input.style.height = 'auto';
-
-  chatHistory.push({ role: 'user', content: message });
+  hideAgentControls();
 
   isProcessing = true;
   document.getElementById('sendBtn').disabled = true;
+  document.getElementById('stopBtn').style.display = 'inline-block';
   showTyping();
 
-  const useProject = document.getElementById('useProject').checked;
-  const projectId = useProject ? (document.getElementById('projectSelect')?.value || '') : '';
+  streamAbortController = new AbortController();
+  let aiElem = null;
+  let fullResponse = '';
+  let sseBuffer = '';
+
   try {
-    const data = await apiCall('/chat', {
-      message: message,
-      history: chatHistory.slice(-10),
-      use_rag: useRag,
-      project_id: projectId || undefined,
-      user_id: 'default',
+    const resp = await fetch(`${API}/chat/smart/stream`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        message: fullMessage,
+        session_id: sessionId,
+        user_id: 'default',
+        selected_indices: selectedIndices,
+        history: [],
+        use_rag: true,
+        project_id: projectId || undefined,
+      }),
+      signal: streamAbortController.signal,
     });
 
+    if (!resp.ok) throw new Error(`서버 오류: HTTP ${resp.status}`);
+
     hideTyping();
-    const answer = data.data?.answer || '응답을 받지 못했습니다.';
-    appendMessage('assistant', answer);
-    chatHistory.push({ role: 'assistant', content: answer });
+    aiElem = createAssistantMsg();
+
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder();
+
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      sseBuffer += decoder.decode(value, { stream: true });
+
+      // 완성된 이벤트 블록(\n\n) 단위로 처리
+      const parts = sseBuffer.split('\n\n');
+      sseBuffer = parts.pop() || '';
+
+      for (const block of parts) {
+        if (!block.trim()) continue;
+        let evType = null, evData = null;
+        for (const line of block.split('\n')) {
+          if (line.startsWith('data: ')) {
+            try { evData = JSON.parse(line.slice(6)); } catch {}
+          } else if (line.startsWith('event: ')) {
+            evType = line.slice(7).trim();
+          }
+        }
+        if (!evType || evData === null) continue;
+
+        if (evType === 'status') {
+          if (evData.session_id) sessionId = evData.session_id;
+        } else if (evType === 'token' && evData.content) {
+          fullResponse += evData.content;
+          updateAssistantMsg(aiElem, fullResponse);
+        } else if (evType === 'done') {
+          if (evData.session_id) sessionId = evData.session_id;
+          processStreamResponse(aiElem, fullResponse);
+        }
+      }
+    }
   } catch (e) {
-    hideTyping();
-    appendMessage('assistant', `❌ 오류: ${e.message}`);
+    if (e.name !== 'AbortError') {
+      hideTyping();
+      if (!aiElem) aiElem = createAssistantMsg();
+      updateAssistantMsg(aiElem, fullResponse + (fullResponse ? '\n\n' : '') + `❌ 오류: ${e.message}`);
+    }
   } finally {
     isProcessing = false;
     document.getElementById('sendBtn').disabled = false;
+    document.getElementById('stopBtn').style.display = 'none';
+    streamAbortController = null;
     input.focus();
   }
 }
@@ -436,7 +552,14 @@ function handleChatKey(e) {
 }
 
 function clearChat() {
-  chatHistory = [];
+  sessionId = '';
+  selectedIndices = null;
+  hideAgentControls();
+  document.getElementById('todoDashboard').style.display = 'none';
+  document.getElementById('todoContent').innerHTML = '';
+  document.getElementById('qaPanel').style.display = 'none';
+  const badge = document.getElementById('qaSelectionBadge');
+  if (badge) badge.style.display = 'none';
   const container = document.getElementById('chatMessages');
   container.innerHTML = '<div class="msg system">대화가 초기화되었습니다.</div>';
 }
@@ -597,6 +720,168 @@ function openProfileUpload() {
       }
     })
     .catch(e => alert('등록 실패: ' + e.message));
+}
+
+// ── 동적 AI 메시지 생성/업데이트 ──
+function createAssistantMsg() {
+  const container = document.getElementById('chatMessages');
+  const div = document.createElement('div');
+  div.className = 'msg assistant';
+  div.innerHTML = `<div class="md-content"></div><div class="time">${new Date().toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'})}</div>`;
+  container.appendChild(div);
+  container.scrollTop = container.scrollHeight;
+  return div;
+}
+
+function updateAssistantMsg(elem, text) {
+  if (!elem) return;
+  const c = elem.querySelector('.md-content');
+  if (c) c.innerHTML = renderMarkdown(text);
+  document.getElementById('chatMessages').scrollTop = 99999;
+}
+
+// ── 스트리밍 완료 후 후처리 ──
+function processStreamResponse(aiElem, fullText) {
+  // [Todo List] 블록 감지 → 대시보드 렌더링, 채팅에서 제거
+  const todoMatch = fullText.match(/\[Todo List\]([\s\S]*?)(?=\n\n\*\*Thought|\n\n\*\*Action|$)/);
+  if (todoMatch) {
+    renderTodoDashboard(todoMatch[0]);
+    const withoutTodo = fullText
+      .replace(/\[Todo List\][\s\S]*?(?=\*\*Thought|\*\*Action)/, '')
+      .trim();
+    if (withoutTodo) updateAssistantMsg(aiElem, withoutTodo);
+  }
+  // **Action**: 코드뼔록 종료 감지 → 에이전트 제어 버튼 표시
+  if (/\*\*Action[^*]*\*\*[\s\S]*?```/.test(fullText)) {
+    showAgentControls();
+  }
+}
+
+// ── Todo 대시보드 ──
+function renderTodoDashboard(todoText) {
+  const el = document.getElementById('todoContent');
+  if (!el) return;
+  let html = '<div style="font-size:11px;color:var(--fg2);margin-bottom:4px;">📋 작업 현황</div>';
+  for (const line of todoText.split('\n')) {
+    const t = line.trim();
+    if (!t || t === '[Todo List]') continue;
+    if (t.includes('🟢')) html += `<div class="todo-item done">${escapeHtml(t)}</div>`;
+    else if (t.includes('🔵')) html += `<div class="todo-item active">${escapeHtml(t)}</div>`;
+    else if (t.includes('⚪')) html += `<div class="todo-item waiting">${escapeHtml(t)}</div>`;
+    else html += `<div class="todo-item">${escapeHtml(t)}</div>`;
+  }
+  el.innerHTML = html;
+  document.getElementById('todoDashboard').style.display = 'block';
+}
+
+// ── 에이전트 제어 버튼 ──
+function showAgentControls() {
+  const el = document.getElementById('agentControls');
+  if (el) el.style.display = 'block';
+  document.getElementById('chatMessages').scrollTop = 99999;
+}
+
+function hideAgentControls() {
+  const el = document.getElementById('agentControls');
+  if (el) el.style.display = 'none';
+  const errInput = document.getElementById('agentErrorInput');
+  if (errInput) errInput.style.display = 'none';
+  const errText = document.getElementById('agentErrorText');
+  if (errText) errText.value = '';
+}
+
+function agentFeedback(type) {
+  if (type === 'fail') {
+    document.getElementById('agentErrorInput').style.display = 'flex';
+    return;
+  }
+  const ctx = type === 'success'
+    ? '코드가 정상적으로 작동합니다. 현재 🔵 진행중 작업을 🟢 완료 상태로 갱신하고, 다음 ⚪ 대기 작업이 있다면 Thought 분석을 시작해 주세요. 더 이상 대기 작업이 없다면 전체 완료를 알려주세요.'
+    : '적용 테스트를 생략합니다. 현재 작업을 🟢 완료로 처리하고, 즉시 다음 ⚪ 대기 작업의 코드를 이어서 작성해 주세요. 대기 작업이 없다면 전체 완료를 알려주세요.';
+  hideAgentControls();
+  triggerChat(ctx);
+}
+
+function agentSubmitError() {
+  const errText = document.getElementById('agentErrorText').value.trim();
+  if (!errText) return;
+  hideAgentControls();
+  triggerChat(`다음 피드백/에러가 발생했습니다:\n\`\`\`\n${errText}\n\`\`\`\n이 문제의 원인을 Thought에 서 분석하고 코드를 Action으로 수정해 주세요.`);
+}
+
+function triggerChat(message) {
+  document.getElementById('chatInput').value = message;
+  sendChat();
+}
+
+function stopStream() {
+  if (streamAbortController) streamAbortController.abort();
+}
+
+// ── QA 참고 목록 패널 ──
+async function toggleQaPanel() {
+  const panel = document.getElementById('qaPanel');
+  if (!panel) return;
+  if (panel.style.display === 'none' || !panel.style.display) {
+    await loadQaPairs();
+    panel.style.display = 'flex';
+  } else {
+    panel.style.display = 'none';
+  }
+}
+
+async function loadQaPairs() {
+  const listElem = document.getElementById('qaList');
+  if (!sessionId) {
+    listElem.innerHTML = '<p style="color:var(--fg2);padding:8px;font-size:12px;">대화를 시작하면 참고할 내용을 선택할 수 있습니다.</p>';
+    return;
+  }
+  listElem.innerHTML = '<p style="color:var(--fg2);padding:8px;font-size:12px;">로딩 중...</p>';
+  try {
+    const r = await fetch(`${API}/sessions/${sessionId}/qa-pairs`);
+    const d = await r.json();
+    const pairs = d.data || [];
+    document.getElementById('qaPairCount').textContent = pairs.length ? `(${pairs.length}개)` : '';
+    if (!pairs.length) {
+      listElem.innerHTML = '<p style="color:var(--fg2);padding:8px;font-size:12px;">아직 대화 기록이 없습니다.</p>';
+      return;
+    }
+    const allSel = selectedIndices === null;
+    const rows = pairs.map(p => {
+      const chk = allSel || (selectedIndices || []).includes(p.index);
+      return `<div class="qa-item">
+        <input type="checkbox" id="qa_${p.index}" value="${p.index}" ${chk ? 'checked' : ''} onchange="updateQaSelection()">
+        <label for="qa_${p.index}">${escapeHtml(p.question)}</label>
+        ${p.has_answer ? '<span style="color:var(--green);font-size:10px;">✓</span>' : ''}
+      </div>`;
+    }).join('');
+    listElem.innerHTML = `<div style="display:flex;gap:6px;padding:4px 8px;border-bottom:1px solid var(--border);flex-shrink:0;">
+      <button class="btn" style="font-size:11px;padding:2px 8px;" onclick="selectAllQa(true)">전체 선택</button>
+      <button class="btn" style="font-size:11px;padding:2px 8px;" onclick="selectAllQa(false)">전체 해제</button>
+    </div>${rows}`;
+  } catch (e) {
+    listElem.innerHTML = `<p style="color:var(--red);padding:8px;font-size:12px;">로드 실패: ${escapeHtml(e.message)}</p>`;
+  }
+}
+
+function updateQaSelection() {
+  const cbs = Array.from(document.querySelectorAll('#qaList input[type="checkbox"]'));
+  const checked = cbs.filter(cb => cb.checked).map(cb => parseInt(cb.value));
+  selectedIndices = (checked.length === cbs.length) ? null : (checked.length === 0 ? [] : checked);
+  const badge = document.getElementById('qaSelectionBadge');
+  if (badge) {
+    if (selectedIndices === null) {
+      badge.style.display = 'none';
+    } else {
+      badge.textContent = `${checked.length}개 선택`;
+      badge.style.display = 'inline';
+    }
+  }
+}
+
+function selectAllQa(select) {
+  document.querySelectorAll('#qaList input[type="checkbox"]').forEach(cb => cb.checked = select);
+  updateQaSelection();
 }
 
 // ── 초기화 ──
