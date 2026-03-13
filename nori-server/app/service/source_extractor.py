@@ -215,6 +215,68 @@ def extract_file_structure(file_path: str, content: str) -> list[dict]:
     return []
 
 
+# ── 자산 분류 ──
+_TEMPLATE_PATH_PATTERNS = (
+    "/editor/", "/editors/",
+    "/template/", "/templates/",
+    "/layout/", "/layouts/",
+    "/include/", "/includes/",
+    "/common/ui/", "/common/assets/",
+    "/sample/", "/samples/",
+    "/publish/", "/publishing/",
+    "/skin/", "/skins/",
+    "/theme/", "/themes/",
+)
+
+
+def classify_asset(file_path: str) -> dict:
+    """알라 파일 경로 기반 수집 정체 반환.
+
+    Returns:
+        dict with keys: domain, asset_type, index_mode, search_priority
+        - index_mode == 'full': 업무 코드, 전체 청킹
+        - index_mode == 'reference_only': 에디터/템플릿, 위치 정보만 저장
+    """
+    normalized = file_path.replace("\\", "/").lower()
+    for pattern in _TEMPLATE_PATH_PATTERNS:
+        if pattern in normalized:
+            if "/editor" in normalized:
+                asset_type = "editor_template"
+            elif "/include" in normalized or "/common" in normalized:
+                asset_type = "shared_include"
+            else:
+                asset_type = "layout_template"
+            return {
+                "domain": "template",
+                "asset_type": asset_type,
+                "index_mode": "reference_only",
+                "search_priority": "low",
+            }
+    return {
+        "domain": "project",
+        "asset_type": "business_code",
+        "index_mode": "full",
+        "search_priority": "normal",
+    }
+
+
+def build_reference_item(file_path: str, classification: dict, project_id: str = "") -> dict:
+    """reference_only 자산의 경량 구조 아이템 생성 (full 첨킹 없이 위치만 기록)."""
+    normalized = file_path.replace("\\", "/")
+    file_name = normalized.rsplit("/", 1)[-1]
+    return {
+        "type": "template_ref",
+        "project": normalized.split("/", 1)[0] if "/" in normalized else project_id,
+        "file_path": file_path,
+        "name": file_name,
+        "asset_type": classification["asset_type"],
+        "index_mode": "reference_only",
+        "description": f"{classification['asset_type']}: {file_name}",
+        "comment": "template-reference",
+        "line": 0,
+    }
+
+
 def structure_to_chunks(items: list[dict], file_path: str, max_per_chunk: int = 8) -> Iterator[tuple[str, dict]]:
     del max_per_chunk
     for item in items:
@@ -250,6 +312,14 @@ def structure_to_chunks(items: list[dict], file_path: str, max_per_chunk: int = 
                 f"FILE\n{item.get('file_path', file_path)}\n\n"
                 f"KIND\n{kind}\n\n"
                 f"KEYWORD\n{name}\n\n"
+                f"DESCRIPTION\n{desc}"
+            )
+        elif kind == "template_ref":
+            text = (
+                "TYPE\nTemplate Reference\n\n"
+                f"PROJECT\n{item.get('project', _project_name(file_path))}\n\n"
+                f"FILE\n{item.get('file_path', file_path)}\n\n"
+                f"ASSET TYPE\n{item.get('asset_type', 'template')}\n\n"
                 f"DESCRIPTION\n{desc}"
             )
         else:

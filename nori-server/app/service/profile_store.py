@@ -155,7 +155,9 @@ def load_server_context(settings, user_id: str, project_id: str) -> dict:
 
 def save_source_structure(settings, user_id: str, project_id: str, files: list[dict]) -> int:
     """Extract and persist source structure records."""
-    from app.service.source_extractor import extract_file_structure
+    from app.service.source_extractor import (
+        extract_file_structure, classify_asset, build_reference_item,
+    )
 
     items_all = []
     for item in files:
@@ -163,8 +165,19 @@ def save_source_structure(settings, user_id: str, project_id: str, files: list[d
         content = item.get("content", "")
         if not path or not content:
             continue
+
+        classification = classify_asset(path)
+
+        if classification["index_mode"] == "reference_only":
+            # 템플릿/에디터 파일 → 위치 참조만 저장 (청킹 안 함)
+            items_all.append(build_reference_item(path, classification, project_id))
+            continue
+
+        # 업무 코드 → 전체 구조 추출
         for extracted in extract_file_structure(path, content):
             extracted["file_path"] = path
+            extracted["asset_type"] = "business_code"
+            extracted["index_mode"] = "full"
             if not extracted.get("project"):
                 normalized = path.replace("\\", "/").strip("/")
                 extracted["project"] = normalized.split("/", 1)[0] if normalized else project_id
@@ -218,7 +231,12 @@ def chunk_profile_for_embedding(content: str, max_chars: int = 1200) -> Iterator
 
 
 def chunk_source_structure_for_embedding(items: list[dict], max_per_chunk: int = 10) -> Iterator[tuple[str, dict]]:
-    """Convert source structure items into fine-grained embedding chunks."""
+    """Convert source structure items into fine-grained embedding chunks.
+
+    index_mode 기반으로 대상 콜렉션 분리:
+    - full → 'custom' (business code)
+    - reference_only → 'project-templates'
+    """
     from app.service.source_extractor import structure_to_chunks
 
     by_file: dict[str, list[dict]] = {}
@@ -229,13 +247,21 @@ def chunk_source_structure_for_embedding(items: list[dict], max_per_chunk: int =
         by_file.setdefault(path, []).append(item)
 
     for path, file_items in by_file.items():
+        # 파일 내 첫 아이템의 index_mode로 콜렉션 결정
+        first_mode = file_items[0].get("index_mode", "full")
+        target_collection = "project-templates" if first_mode == "reference_only" else "custom"
+
         emitted = 0
         for chunk, meta in structure_to_chunks(file_items, path, max_per_chunk=max_per_chunk):
             if len(chunk.strip()) <= 20:
                 continue
             emitted += 1
-            yield chunk, meta
+            yield chunk, {**meta, "target_collection": target_collection}
         if emitted == 0:
             names = [item.get("name", "") for item in file_items if item.get("name")]
             if names:
-                yield "\n".join(names[:max_per_chunk]), {"type": "source_structure", "file_path": path}
+                yield "\n".join(names[:max_per_chunk]), {
+                    "type": "source_structure",
+                    "file_path": path,
+                    "target_collection": target_collection,
+                }

@@ -68,6 +68,11 @@ _IDENTIFIER_RE = re.compile(
     r"\b[A-Z][a-zA-Z0-9]{2,}\b|[a-z][a-z0-9]*(?:[A-Z][a-zA-Z0-9]+)+"
 )
 
+# 드의 가중치 설정
+_HEADING_WEIGHT = 3   # [Method], [Constructor], # 제목 등
+_IDENTIFIER_WEIGHT = 2  # camelCase / PascalCase 식별자
+_BODY_WEIGHT = 1        # 하위 콘텐츠 일반 단어
+
 
 def _detect_domain(source_type: str) -> str:
     return DOMAIN_MAP.get(source_type, "misc")
@@ -99,16 +104,53 @@ def _extract_entities(text: str) -> str:
     return ",".join(seen)
 
 
-def _extract_keywords(text: str) -> str:
-    """ํ•ต심 키워드 추출 (10개). ChromaDB 호환을 위해 쉼표 구분 문자열 반환."""
+# ── Heading 가중치 기반 Keyword 추출 ──
+_HEADING_RE = re.compile(r"(?:\[(.*?)\]|^#{1,6}\s+(.+))\s+([A-Za-z0-9_]+)", re.M)
+_CAMEL_RE = re.compile(r"[a-z][a-z0-9]*(?:[A-Z][a-zA-Z0-9]+)+")
+
+
+def _extract_keywords_weighted(text: str, top_n: int = 10) -> str:
+    """도큐 Heading ·3 / 식별자 ·2 / 도큐 Body ·1 가중치 키워드 추출.
+
+    Returns CSV 문자열 (ChromaDB metadata 호환).
+    """
+    score: Counter = Counter()
+
+    # 1) Heading 영역 — [Method] substring, # 제목 등
+    for m in _HEADING_RE.finditer(text):
+        # 그룹 1: 레이블 (간혁표 표기), 그룹 2: markdown heading, 그룹 3: 블록 첫 단어
+        label = m.group(1) or m.group(2) or ""
+        word = m.group(3)
+        # label 자체도 키워드
+        for tok in re.findall(r"[a-zA-Z]{3,}", label):
+            if tok.lower() not in _EN_STOPWORDS:
+                score[tok.lower()] += _HEADING_WEIGHT
+        if word and word.lower() not in _EN_STOPWORDS:
+            score[word.lower()] += _HEADING_WEIGHT
+
+    # 2) camelCase / PascalCase 식별자 — Identifier weight
+    for ident in _CAMEL_RE.findall(text):
+        score[ident.lower()] += _IDENTIFIER_WEIGHT
+    for pascal in re.findall(r"\b[A-Z][a-z][a-zA-Z0-9]+\b", text):
+        score[pascal.lower()] += _IDENTIFIER_WEIGHT
+
+    # 3) Body 일반 단어
     ko_words = re.findall(r"[\uAC00-\uD7A3]{2,}", text)
     en_words = re.findall(r"[a-zA-Z]{3,}", text)
-    candidates = (
-        [w for w in ko_words if w not in _KO_STOPWORDS]
-        + [w.lower() for w in en_words if w.lower() not in _EN_STOPWORDS]
-    )
-    freq = Counter(candidates)
-    return ",".join(w for w, _ in freq.most_common(10))
+    for w in ko_words:
+        if w not in _KO_STOPWORDS:
+            score[w] += _BODY_WEIGHT
+    for w in en_words:
+        lw = w.lower()
+        if lw not in _EN_STOPWORDS:
+            score[lw] += _BODY_WEIGHT
+
+    return ",".join(w for w, _ in score.most_common(top_n))
+
+
+def _extract_keywords(text: str) -> str:
+    """보조 함수: heading 가중치 방식으로 키워드 추출 (ChromaDB CSV 반환)."""
+    return _extract_keywords_weighted(text)
 
 
 def _enrich_metadata(meta: dict, source_type: str, text: str) -> None:

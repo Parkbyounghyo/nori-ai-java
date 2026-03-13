@@ -49,7 +49,8 @@ class EmbeddingService:
 
             # 기본 컬렉션 초기화
             for name in ("javadoc", "spring", "egov", "community",
-                         "web-ui", "desktop-ui", "errors", "custom", "profiles"):
+                         "web-ui", "desktop-ui", "errors", "custom",
+                         "project-templates", "profiles"):
                 self._collections[name] = self._chroma_client.get_or_create_collection(
                     name=name,
                     metadata={"hnsw:space": "cosine"},
@@ -161,6 +162,25 @@ class EmbeddingService:
         all_results.sort(key=lambda x: x["score"], reverse=True)
         candidates = all_results[:fetch_k]
         return self._rerank(query, candidates, top_k)
+
+    # ── 프로젝트 전용 검색 메서드 ──
+    async def search_project(self, query: str, top_k: int = 5,
+                             project_id: str | None = None) -> list[dict]:
+        """업무 코드 컬렉션(custom)만 검색. 템플릿 제외."""
+        filters = {"project": project_id} if project_id else None
+        return await self.search(
+            query=query, top_k=top_k,
+            collections=["custom"], filters=filters,
+        )
+
+    async def search_template(self, query: str, top_k: int = 5,
+                              project_id: str | None = None) -> list[dict]:
+        """템플릿/에디터 자산 컬렉션(project-templates) 검색."""
+        filters = {"project": project_id} if project_id else None
+        return await self.search(
+            query=query, top_k=top_k,
+            collections=["project-templates"], filters=filters,
+        )
 
     # ── 버전/에러 필터 검색 ──
     async def search_by_error(self, error_pattern: str, top_k: int = 5,
