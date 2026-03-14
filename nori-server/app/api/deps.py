@@ -10,6 +10,7 @@ from app.config.settings import Settings, get_settings
 from app.service.llm_service import LlmService
 from app.service.embedding_service import EmbeddingService
 from app.service.memo_service import MemoService
+from app.db import connection as db_conn
 # ── 서비스 싱글턴 ──
 _llm_service: LlmService | None = None
 _embedding_service: EmbeddingService | None = None
@@ -31,6 +32,13 @@ async def init_services(settings: Settings):
     await _embedding_service.initialize()
     # LLM 서비스에 메모 서비스 연결
     _llm_service.set_memo_service(_memo_service)
+    # MariaDB 풀 초기화
+    await db_conn.init_db_pool(settings)
+
+
+async def close_services():
+    """서버 종료 시 서비스 정리"""
+    await db_conn.close_db_pool()
 
 
 def get_llm_service() -> LlmService:

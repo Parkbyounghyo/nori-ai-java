@@ -133,3 +133,38 @@ def expand_queries_multi(queries: list[str], max_per_query: int = 2) -> list[str
                 result.append(eq)
                 seen.add(eq)
     return result
+
+
+# ────────────────────────────────────────────────────────────
+# UI 솔루션 필터 빌더
+# ────────────────────────────────────────────────────────────
+_SOLUTION_KEYWORDS: dict[str, str] = {
+    "ckeditor":    "ckeditor",
+    "smarteditor": "smarteditor",
+    "toast-ui":    "toastui",
+    "toastui":     "toastui",
+    "jquery-ui":   "jquery-ui",
+    "jquery ui":   "jquery-ui",
+    "bootstrap":   "bootstrap",
+    "datatables":  "datatables",
+    "select2":     "select2",
+    "highcharts":  "highcharts",
+    "chart.js":    "chartjs",
+    "chartjs":     "chartjs",
+    "d3.js":       "d3",
+    "leaflet":     "leaflet",
+    "swiper":      "swiper",
+    "fullcalendar":"fullcalendar",
+}
+
+
+def build_solution_filter(query: str) -> dict | None:
+    """쿼리에서 UI 솔루션 라이브러리명을 탐지해 ChromaDB where 필터를 반환한다.
+
+    탐지 실패 시 None 반환.
+    """
+    q = query.lower()
+    for keyword, solution in _SOLUTION_KEYWORDS.items():
+        if keyword in q:
+            return {"solution": solution}
+    return None

@@ -32,6 +32,50 @@ class Document:
 # ────────────────────────────────────────────────────────────
 # Metadata 보강 유틸
 # ────────────────────────────────────────────────────────────
+# ────────────────────────────────────────────────────────────
+# UI 솔루션 라이브러리 탐지
+# ────────────────────────────────────────────────────────────
+_SOLUTION_MAP: dict[str, str] = {
+    "ckeditor":    "ckeditor",
+    "smarteditor": "smarteditor",
+    "toast-ui":    "toastui",
+    "toastui":     "toastui",
+    "jquery-ui":   "jquery-ui",
+    "bootstrap":   "bootstrap",
+    "datatables":  "datatables",
+    "select2":     "select2",
+    "highcharts":  "highcharts",
+    "chart.js":    "chartjs",
+    "chartjs":     "chartjs",
+    "d3":          "d3",
+    "leaflet":     "leaflet",
+    "swiper":      "swiper",
+    "fullcalendar":"fullcalendar",
+}
+
+_VENDOR_PATH_MARKERS = ["/vendor/", "/lib/", "/plugins/", "/ckeditor/", "/dist/", "/bower_components/"]
+_USAGE_PATH_MARKERS  = ["/jsp/", "/templates/", "/views/", "/admin/", "/pages/", "/include/"]
+
+
+def detect_solution_from_path(path: str) -> str:
+    """파일 경로에서 UI 솔루션 라이브러리명을 탐지한다."""
+    p = path.lower().replace("\\", "/")
+    for key, val in _SOLUTION_MAP.items():
+        if key in p:
+            return val
+    return ""
+
+
+def detect_doc_role(path: str) -> str:
+    """경로 기반으로 문서 역할(vendor_source / project_usage / general)을 반환한다."""
+    p = path.lower().replace("\\", "/")
+    if any(m in p for m in _VENDOR_PATH_MARKERS):
+        return "vendor_source"
+    if any(m in p for m in _USAGE_PATH_MARKERS):
+        return "project_usage"
+    return "general"
+
+
 DOMAIN_MAP: dict[str, str] = {
     "javadoc":            "dev",
     "spring-doc":         "dev",
@@ -153,12 +197,22 @@ def _extract_keywords(text: str) -> str:
     return _extract_keywords_weighted(text)
 
 
-def _enrich_metadata(meta: dict, source_type: str, text: str) -> None:
-    """domain / language / keywords / entity_names 필드를 meta dict에 인플레이스 추가."""
+def _enrich_metadata(meta: dict, source_type: str, text: str,
+                     file_path: str = "") -> None:
+    """domain / language / keywords / entity_names 필드를 meta dict에 인플레이스 추가.
+
+    web-ui / desktop-ui 인 경우 solution / doc_role 도 추가한다.
+    """
     meta["domain"] = _detect_domain(source_type)
     meta["language"] = _detect_language(text)
     meta["keywords"] = _extract_keywords(text)
     meta["entity_names"] = _extract_entities(text)
+
+    if source_type in ("web-ui", "desktop-ui") and file_path:
+        solution = detect_solution_from_path(file_path)
+        if solution:
+            meta["solution"] = solution
+        meta["doc_role"] = detect_doc_role(file_path)
 
 
 # ────────────────────────────────────────────────────────────
@@ -422,6 +476,7 @@ def parse_json_file(file_path: str | Path) -> list[Document]:
             doc.metadata,
             doc.metadata.get("source_type", source_type),
             doc.text,
+            file_path=str(fp),
         )
     return docs
 

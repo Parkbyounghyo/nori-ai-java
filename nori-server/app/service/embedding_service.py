@@ -50,7 +50,7 @@ class EmbeddingService:
             # 기본 컬렉션 초기화
             for name in ("javadoc", "spring", "egov", "community",
                          "web-ui", "desktop-ui", "errors", "custom",
-                         "project-templates", "profiles"):
+                         "project-templates", "profiles", "database"):
                 self._collections[name] = self._chroma_client.get_or_create_collection(
                     name=name,
                     metadata={"hnsw:space": "cosine"},
@@ -182,7 +182,21 @@ class EmbeddingService:
             collections=["project-templates"], filters=filters,
         )
 
-    # ── 버전/에러 필터 검색 ──
+    # ── 버전/에러/솔루션 필터 검색 ──
+    async def search_by_solution(self, query: str, solution: str,
+                                 doc_role: str | None = None,
+                                 top_k: int = 5) -> list[dict]:
+        """UI 솔루션 라이브러리(CKEditor, SmartEditor 등)로 필터링된 검색."""
+        filters: dict = {"solution": solution}
+        if doc_role:
+            filters["doc_role"] = doc_role
+        return await self.search(
+            query=query,
+            top_k=top_k,
+            collections=["web-ui", "desktop-ui"],
+            filters=filters,
+        )
+
     async def search_by_error(self, error_pattern: str, top_k: int = 5,
                               java_version: str | None = None) -> list[dict]:
         """에러 패턴으로 특화 검색"""

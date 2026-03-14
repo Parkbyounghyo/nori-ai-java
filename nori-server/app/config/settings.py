@@ -46,6 +46,14 @@ class Settings(BaseSettings):
     cors_origins: str = "*"
     debug: bool = False
 
+    # ── MariaDB (Structure Index Database) ──
+    db_host: str = "localhost"
+    db_port: int = 3306
+    db_user: str = "root"
+    db_password: str = ""
+    db_name: str = "nori_java"
+    db_pool_size: int = 5
+
     # ── 경로 ──
     data_dir: str = "../nori-collector/data"
     prompts_dir: str = "prompts"
